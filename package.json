@@ -9,6 +9,8 @@
     "dev": "vite --host 0.0.0.0",
     "build": "tsc && vite build",
     "preview": "vite preview --host 0.0.0.0",
+    "sync:upstream": "node scripts/sync-upstream.mjs",
+    "bundle:runtime": "node scripts/bundle-runtime.mjs",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",

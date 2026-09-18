@@ -145,14 +145,14 @@ export function App() {
       ...message,
       content:
         settings.orchestrationMode === "dag"
-          ? `${orchestrationStages[index]?.title ?? activeProfiles[index].name} 等待执行...`
-          : "思考中...",
+          ? `[${orchestrationStages[index]?.title ?? activeProfiles[index].name}] 正在初始化算子通道...`
+          : "算子通道正在处理...",
     }));
 
     setDraft("");
     setIsSending(true);
     setMessages([...baseMessages, ...pendingMessages]);
-    setStatus(settings.orchestrationMode === "dag" && activeProfiles.length > 1 ? "DAG 编排执行中" : "正在发送");
+    setStatus(settings.orchestrationMode === "dag" && activeProfiles.length > 1 ? "DAG 流水线执行中" : "通道调度中");
 
     // Map stage.id → pending message id for progress event matching
     const stageToPending = new Map<string, string>();
@@ -165,14 +165,14 @@ export function App() {
     try {
       // Listen for progress events (DAG mode emits these per stage)
       const unlisten = await listen<OrchestrationProgressEvent>("orchestration-progress", (event) => {
-        const { stageId, stageTitle, profileName, status: eventStatus, content } = event.payload;
+        const { stageId, stageTitle, profileName, status: eventStatus } = event.payload;
         const pendingId = stageToPending.get(stageId);
 
         if (eventStatus === "running") {
-          setStatus(`${stageTitle}: ${profileName} 执行中`);
+          setStatus(`${stageTitle}: ${profileName} 推进中`);
           if (pendingId) {
             setMessages((prev) =>
-              prev.map((msg) => (msg.id === pendingId ? { ...msg, content: `${stageTitle} 正在处理...` } : msg)),
+              prev.map((msg) => (msg.id === pendingId ? { ...msg, content: `[${stageTitle}] 算子解析中...` } : msg)),
             );
           }
         }
@@ -194,12 +194,21 @@ export function App() {
       // Mark all pending messages as errors
       setMessages((prev) =>
         prev.map((msg) =>
-          msg.pending ? { ...msg, content: String(error), pending: false, error: true } : msg,
+          msg.pending ? { ...msg, content: `[DISPATCH_ERROR] ${String(error)}`, pending: false, error: true } : msg,
         ),
       );
     } finally {
       setIsSending(false);
-      setStatus("您的智能体清醒着");
+      setStatus("HARNESS_STANDBY // 终端就绪");
+    }
+  }
+
+  function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      if (canSend) {
+        void sendMessage(event);
+      }
     }
   }
 
@@ -209,6 +218,7 @@ export function App() {
     setMessages([]);
     try {
       await invoke("clear_history");
+      setStatus("RUNTIME_LOGS_PURGED // 缓存已清空");
     } catch (error) {
       console.error(error);
     }
@@ -219,12 +229,19 @@ export function App() {
   if (!settings) {
     return (
       <div className="app-shell">
+        <div className="film-grain-overlay" aria-hidden="true" />
         <header className="topbar">
-          <div>
-            <p className="eyebrow">Hyacinth</p>
-            <h1>WITH YOU</h1>
+          <div className="brand-block">
+            <span className="brand-tag">AGENT HARNESS</span>
+            <h1 className="brand-title">ARIA</h1>
+            <span className="brand-sub">// 智役：咏叹终端</span>
           </div>
-          <div className="status-pill">{status}</div>
+          <div className="topbar-telemetry">
+            <div className="telemetry-item">
+              <span className="status-indicator busy" />
+              <span>INITIALIZING...</span>
+            </div>
+          </div>
         </header>
       </div>
     );
@@ -234,12 +251,31 @@ export function App() {
 
   return (
     <div className="app-shell">
+      <div className="film-grain-overlay" aria-hidden="true" />
+
       <header className="topbar">
-        <div>
-          <p className="eyebrow">Hyacinth</p>
-          <h1>WITH YOU</h1>
+        <div className="brand-block">
+          <span className="brand-tag">AGENT HARNESS</span>
+          <h1 className="brand-title">ARIA</h1>
+          <span className="brand-sub">// 智役：咏叹终端</span>
         </div>
-        <div className="status-pill">{status}</div>
+
+        <div className="topbar-telemetry">
+          <div className="telemetry-item">
+            <span>ENV:</span>
+            <strong>WIN_DESKTOP</strong>
+          </div>
+          <div className="telemetry-item">
+            <span>SLOTS:</span>
+            <strong>
+              {activeProfiles.length} / {settings.aiProfiles.length}
+            </strong>
+          </div>
+          <div className="telemetry-item">
+            <span className={`status-indicator ${isSending ? "busy" : ""}`} />
+            <span>{status}</span>
+          </div>
+        </div>
       </header>
 
       <main className={`workspace ${isSidePanelCollapsed ? "side-panel-collapsed" : ""}`}>
@@ -247,7 +283,7 @@ export function App() {
           <button
             className="panel-collapse-button"
             type="button"
-            aria-label={isSidePanelCollapsed ? "展开 AI 管理栏" : "收起 AI 管理栏"}
+            aria-label={isSidePanelCollapsed ? "展开装具面板" : "收起装具面板"}
             aria-expanded={!isSidePanelCollapsed}
             onClick={() => setIsSidePanelCollapsed((collapsed) => !collapsed)}
           >
@@ -277,60 +313,62 @@ export function App() {
           )}
         </aside>
 
-        <section className="chat-area" aria-label="聊天">
+        <section className="chat-area" aria-label="执行终端">
           <div className="mode-strip">
             <button className={activePanel === "chat" ? "active" : ""} onClick={() => setActivePanel("chat")}>
-              对话
+              TERMINAL // 执行流
             </button>
             <button className={activePanel === "agents" ? "active" : ""} onClick={() => setActivePanel("agents")}>
-              AI
+              SLOTS // 算子槽位
             </button>
             <button className={activePanel === "settings" ? "active" : ""} onClick={() => setActivePanel("settings")}>
-              设置
+              CONFIG // 系统设置
             </button>
           </div>
 
           <div className="orchestration-bar">
             <div>
-              <p className="eyebrow">Orchestration</p>
-              <strong>{settings.orchestrationMode === "dag" ? "DAG 编排" : "并行群聊"}</strong>
+              <p className="eyebrow">DISPATCH PROTOCOL</p>
+              <strong>{settings.orchestrationMode === "dag" ? "DETERMINISTIC DAG // 确定性拓扑" : "PARALLEL CONCURRENT // 并行群测"}</strong>
             </div>
             <div className="segmented">
               <button
                 className={settings.orchestrationMode === "dag" ? "active" : ""}
                 onClick={() => void persist({ ...settings, orchestrationMode: "dag" })}
               >
-                DAG
+                DAG PIPELINE
               </button>
               <button
                 className={settings.orchestrationMode === "parallel" ? "active" : ""}
                 onClick={() => void persist({ ...settings, orchestrationMode: "parallel" })}
               >
-                并行
+                PARALLEL
               </button>
             </div>
           </div>
 
           <div className="agent-row">
-            {settings.aiProfiles.map((profile) => (
+            {settings.aiProfiles.map((profile, index) => (
               <button
                 key={profile.id}
                 className={`agent-chip ${activeIds.includes(profile.id) ? "selected" : ""}`}
                 onClick={() => toggleActive(profile.id)}
               >
                 <Avatar value={profile.avatar} fallback={profile.name} />
-                {profile.name}
+                <span>
+                  [SLOT-{String(index + 1).padStart(2, "0")}] {profile.name}
+                </span>
               </button>
             ))}
           </div>
 
           {settings.orchestrationMode === "dag" && activeProfiles.length > 1 && (
-            <div className="dag-strip" aria-label="当前 DAG 编排">
+            <div className="dag-strip" aria-label="当前 DAG 流水线">
               {orchestrationStages.map((stage, index) => (
                 <div className="dag-node" key={stage.id}>
                   <span>{stage.title}</span>
                   <strong>{stage.profile.name}</strong>
-                  {index > 0 && <small>依赖上游节点</small>}
+                  {index > 0 && <small>// 依赖上游算子结果</small>}
                 </div>
               ))}
             </div>
@@ -339,8 +377,14 @@ export function App() {
           <div className="message-list">
             {messages.length === 0 ? (
               <div className="empty-state">
-                <h2>开始一次编排</h2>
-                <p>选择多个 AI 后发送问题。DAG 模式会按顺序完成简答、拓展和评价；并行模式会让所有 AI 同时回复。</p>
+                <h2>ARIA // AGENT HARNESS READY</h2>
+                <p>
+                  终端装具中枢已就绪。选定算子槽位后在底部终端录入目标指令。
+                  <br />
+                  <strong>DAG PIPELINE 模式</strong>将串行推进探针、拓展与审校算子；
+                  <br />
+                  <strong>PARALLEL 模式</strong>将并发派发至所有激活槽位。
+                </p>
               </div>
             ) : (
               messages.map((message) => (
@@ -350,7 +394,9 @@ export function App() {
                 >
                   <Avatar value={message.avatar} fallback={message.speakerName} />
                   <div className="bubble">
-                    <div className="speaker">{message.speakerName}</div>
+                    <div className="speaker">
+                      {message.role === "user" ? `// OPERATOR::${message.speakerName}` : `// HARNESS_NODE::${message.speakerName}`}
+                    </div>
                     <p>{message.content}</p>
                   </div>
                 </article>
@@ -362,10 +408,15 @@ export function App() {
             <textarea
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
-              placeholder={activeProfiles.length ? "输入消息" : "先选择至少一个 AI"}
+              onKeyDown={handleKeyDown}
+              placeholder={
+                activeProfiles.length
+                  ? "输入目标指令并按 Enter 派发 (Shift+Enter 换行)..."
+                  : "未挂载激活槽位，请先勾选至少一个算子节点"
+              }
               rows={2}
             />
-            <button disabled={!canSend}>发送</button>
+            <button disabled={!canSend}>DISPATCH // 派发</button>
           </form>
         </section>
       </main>

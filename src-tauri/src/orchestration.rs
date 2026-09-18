@@ -18,26 +18,26 @@ struct StageTemplate {
 
 const ROLE_TEMPLATES: &[StageTemplate] = &[
     StageTemplate {
-        title: "AI1 简答",
-        role: "先行回答者",
-        instruction: "你是多智能体编排中的 AI1。请先对用户问题给出简洁、直接的回答，控制篇幅，优先明确结论和关键依据。不要评价其他智能体。",
+        title: "Node-01 // 探针解析",
+        role: "探针解析算子 (Probe)",
+        instruction: "你是装具流水线中的 Node-01 探针节点。请对输入的目标指令或技术问题进行首轮结构化拆解与直接回应，优先明确关键结论、核心论据与执行基线。不评述装具内部机制。",
     },
     StageTemplate {
-        title: "AI2 拓展",
-        role: "拓展补充者",
-        instruction: "你是多智能体编排中的 AI2。请基于用户问题和 AI1 的回答做拓展补充，补上遗漏的背景、步骤、边界条件或可执行建议。避免重复 AI1 已经说清楚的内容。",
+        title: "Node-02 // 深度拓展",
+        role: "拓展综合算子 (Synthesis)",
+        instruction: "你是装具流水线中的 Node-02 综合节点。请基于目标问题与前序 Node-01 的分析结果进行纵深拓展，补齐架构背景、技术边界、边缘条件与可执行实现细节。避免低效重复。",
     },
     StageTemplate {
-        title: "AI3 评价",
-        role: "评价审校者",
-        instruction: "你是多智能体编排中的 AI3。请评价前面回答的准确性、完整性和风险点，指出需要修正的地方，并给出一个更可靠的最终建议。",
+        title: "Node-03 // 审校评判",
+        role: "评判校验算子 (Critique)",
+        instruction: "你是装具流水线中的 Node-03 校验节点。请客观审校前序各节点的输出，指出潜在的逻辑漏洞、安全性隐患与实现风险，收敛分歧并输出高可信度的终极工程建议。",
     },
 ];
 
 const SPECIALIST_TEMPLATE: StageTemplate = StageTemplate {
     title: "", // computed at runtime
-    role: "专项处理者",
-    instruction: "你是多智能体编排中的专项节点。请基于用户问题和前序节点输出，补充一个新的、有价值的角度，并明确你的补充如何影响最终结论。",
+    role: "专项处理算子 (Specialist)",
+    instruction: "你是装具流水线中的专项扩展节点。请结合前序算子输出，针对专精维度提供增量技术洞察与补充推演。",
 };
 
 // ─── Public API ────────────────────────────────────────────────
@@ -55,7 +55,7 @@ pub fn build_stages(profiles: &[AiProfile]) -> Vec<OrchestrationStage> {
             let title = if index < ROLE_TEMPLATES.len() {
                 template.title.to_string()
             } else {
-                format!("AI{} 专项节点", index + 1)
+                format!("Node-{:02} // 专项算子", index + 1)
             };
 
             let depends_on = if index == 0 {
@@ -80,11 +80,11 @@ pub fn build_stages(profiles: &[AiProfile]) -> Vec<OrchestrationStage> {
 pub fn with_stage_instruction(profile: &AiProfile, stage: &OrchestrationStage) -> AiProfile {
     let base_prompt = profile.system_prompt.trim();
     let orchestration_prompt = format!(
-        "多智能体编排任务:\n\
-         - 当前节点: {}\n\
-         - 节点角色: {}\n\
-         - 节点指令: {}\n\
-         - 输出要求: 使用清晰的小段落或要点，直接面向用户，不要暴露内部实现细节。",
+        "[ARIA_HARNESS_DISPATCH]\n\
+         - 当前流水线节点: {}\n\
+         - 算子角色: {}\n\
+         - 调度执行指令: {}\n\
+         - 准则: 保持冷静、理性、高度结构化与工业级严谨，直接输出工程与技术解析，不暴露底座实现细节。",
         stage.title, stage.role, stage.instruction,
     );
 

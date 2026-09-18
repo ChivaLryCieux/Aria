@@ -13,30 +13,30 @@ export function SettingsPanel({ settings, onClear, onChangeUserName, onChangeOrc
     <div className="panel-content">
       <div className="panel-head">
         <div>
-          <p className="eyebrow">Settings</p>
-          <h2>应用设置</h2>
+          <p className="eyebrow">SYSTEM CONFIG</p>
+          <h2>终端参数配置</h2>
         </div>
       </div>
 
       <section className="profile-card">
-        <Field label="你的名称" value={settings.userName} onChange={onChangeUserName} />
+        <Field label="操作员识别名 (OPERATOR_ID)" value={settings.userName} onChange={onChangeUserName} />
 
         <label className="field">
-          <span>默认协作模式</span>
+          <span>默认调度协议 (DISPATCH_PROTOCOL)</span>
           <select
             value={settings.orchestrationMode}
             onChange={(event) => onChangeOrchestrationMode(event.target.value as AppSettings["orchestrationMode"])}
           >
-            <option value="dag">DAG 编排</option>
-            <option value="parallel">并行群聊</option>
+            <option value="dag">确定性 DAG 流水线 (Deterministic DAG)</option>
+            <option value="parallel">全向并行群测 (Parallel Concurrency)</option>
           </select>
         </label>
 
         <button className="danger full" onClick={onClear}>
-          清空本机聊天记录
+          PURGE LOGS // 清空本机运行时执行记录
         </button>
         <p className="hint">
-          API Key 保存在本机应用配置目录中。DAG 编排会按选中顺序执行 AI1 简答、AI2 拓展、AI3 评价，并把前序输出作为后续节点上下文。
+          // HARNESS_TELEMETRY: 所有凭据与节点参数均原子持久化于操作系统受保护的应用配置目录。DAG 编排按槽位依赖自动级联上下文并执行前向拓扑注入。
         </p>
       </section>
     </div>

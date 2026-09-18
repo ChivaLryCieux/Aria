@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Hyacinth",
-  "version": "0.1.0",
-  "identifier": "com.hyacinth.chat",
+  "productName": "Aria",
+  "version": "0.2.0",
+  "identifier": "com.aria.terminal",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,11 +12,13 @@
   "app": {
     "windows": [
       {
-        "title": "Hyacinth",
-        "width": 1100,
-        "height": 760,
-        "minWidth": 360,
-        "minHeight": 640
+        "title": "Aria // 智役：咏叹终端",
+        "width": 1280,
+        "height": 850,
+        "minWidth": 960,
+        "minHeight": 640,
+        "center": true,
+        "resizable": true
       }
     ],
     "security": {

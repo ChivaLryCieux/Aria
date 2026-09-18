@@ -1,6 +1,7 @@
 {
-  "name": "hyacinth",
-  "version": "0.1.0",
+  "name": "aria",
+  "version": "0.2.0",
+  "description": "Aria - 智役：咏叹终端 (AI Agent Harness Terminal)",
   "private": true,
   "type": "module",
   "scripts": {

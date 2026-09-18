@@ -29,5 +29,5 @@ pub fn run() {
             commands::build_orchestration,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running Hyacinth");
+        .expect("error while running Aria");
 }

@@ -1,80 +1,62 @@
-# Hyacinth
+# Aria // 智役：咏叹终端
 
-Hyacinth 是一个基于 Rust、Tauri 2、React 和 Vite 的跨平台多智能体编排应用。项目优先面向 Android，同时也保留桌面端构建能力。
+> **Aria (AI Agent Harness Terminal)** 是一个基于 Rust、Tauri 2、React 与 TypeScript 构建的工程级智能体装具与编排终端。优先面向 **Desktop / Windows 桌面端**，为复杂研发、推理与多模型协同任务提供严谨、可预测、高信息密度的 AI 编排能力。
 
-## 当前功能
+---
 
-- OpenAI 兼容 `chat/completions` 接口接入
-- 每个 AI 独立配置名称、头像文字、API Key、接口地址、模型、系统提示词和温度
-- 支持 DAG 编排模式：用户发出问题后，AI1 先简要回答，AI2 基于前序输出拓展补充，AI3 评价与审校
-- 支持并行群聊模式：选中的多个 AI 同时回复
-- 编排模式会按选中 AI 的顺序生成节点，并在对话区展示当前 DAG 依赖关系
-- 设置由 Tauri 后端保存到本机应用配置目录
-- 聊天记录保存在本机 `localStorage`
-- 移动端优先布局，桌面端可直接使用右侧 AI 管理面板
+## 核心定位
 
-## 多智能体编排
+Aria 定位于与 **Codex、ZCode、Antigravity** 同类型的 **AI Agent Harness（智能体装具）** 应用：
+- **装具化调度 (Harness & Dispatch)**：每个智能体作为一个标准化算子节点（Agent Node Slot），支持自定义接入点、专属凭据、模型参数与工程约束。
+- **确定性 DAG 流水线 (Deterministic DAG Pipeline)**：串行化推进多节点协同执行：
+  ```text
+  输入指令 -> Node-01 // 探针解析 (Probe) -> Node-02 // 深度拓展 (Synthesis) -> Node-03 // 审校评判 (Critique) -> Node-0X 专项算子
+  ```
+- **全向并行群测 (Parallel Concurrency)**：支持多智能体同态输入并列响应，用于基准对比与多样性探索。
+- **上下文拓扑映射 (Context Topology Mapping)**：异构智能体上下文自动翻译并保真注入，实现跨模型的稳定级联。
 
-应用提供两种协作模式，可在对话区顶部或设置页切换：
+---
 
-- `DAG 编排`：按选中的 AI 顺序串行执行。第一个节点负责简洁作答，第二个节点负责拓展补充，第三个节点负责评价审校，更多节点会作为专项补充节点接入。后续节点会收到用户问题和已完成节点的输出。
-- `并行群聊`：保留原有群聊行为，所有选中的 AI 同时收到当前上下文并独立回复。
+## 视觉与工程美学：砼核粗野主义 (Concrete Core Brutalism)
 
-DAG 编排目前采用线性依赖链作为默认图结构：
+Aria 采用冷静、克制、硬核的**粗野主义（Brutalism）**与**砼核（Béton Brut）**美学：
+- **胶片颗粒与水泥噪点覆层 (Film Grain & Noise Texture)**：底层融合高精度分形噪点，带来硬核工业冷钢与现浇水泥表面质感。
+- **纯直角机械装具排版 (0px Radius / Precision Geometry)**：坚固冷硬的结构分割线、等宽字体（Monospace）遥测标线与工业状态指示灯。
+- **桌面级工作台布局 (Desktop-First Ergonomics)**：为高分辨率大屏幕设计的装具插槽列、中央执行遥测流与侧边检查器。
 
-```text
-用户问题 -> AI1 简答 -> AI2 拓展 -> AI3 评价 -> AI4+ 专项补充
-```
-
-每个节点仍然使用自己的模型、API Key、温度和系统提示词。应用会在请求时追加节点角色说明，不会覆盖用户为该 AI 配置的原始系统提示词。
+---
 
 ## 常用命令
 
 ```bash
-npm install
-npm run build
+# 安装前端依赖
+bun install # 或 npm install
+
+# 启动桌面端开发调试 (Windows / Desktop)
 npm run tauri:dev
+
+# 构建桌面端独立发行包
 npm run tauri:build
-npm run android:init
-npm run android:dev
-npm run android:build
+
+# 前端单独构建与类型校验
+npm run build
 ```
 
-## Android 前置条件
+---
 
-Tauri Android 需要 Android Studio 完成 SDK 配置。根据 Tauri 官方前置要求，需要安装：
+## 架构概览
 
-- Android SDK Platform
-- Android SDK Platform-Tools
-- NDK (Side by side)
-- Android SDK Build-Tools
-- Android SDK Command-line Tools
-
-Linux 下常用环境变量：
-
-```bash
-export JAVA_HOME=/opt/android-studio/jbr
-export ANDROID_HOME="$HOME/Android/Sdk"
-export NDK_HOME="$ANDROID_HOME/ndk/$(ls -1 $ANDROID_HOME/ndk | tail -1)"
-```
-
-还需要安装 Rust Android targets：
-
-```bash
-rustup target add aarch64-linux-android armv7-linux-androideabi i686-linux-android x86_64-linux-android
-```
-
-配置完成后执行：
-
-```bash
-npm run android:init
-npm run android:dev
-```
-
-## Linux 桌面构建前置条件
-
-如果要在 Linux 桌面端执行 `npm run tauri:dev` 或 `npm run tauri:build`，需要安装 WebKitGTK/GLib 等系统开发包。Debian/Ubuntu 系列通常需要：
-
-```bash
-sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libglib2.0-dev libxdo-dev libssl-dev librsvg2-dev
+```text
+Aria 桌面工作台 (Desktop Host)
+├── 前端层 (React 18 + TypeScript + Vite)
+│   ├── 胶片颗粒/水泥噪点滤镜层 (Noise Overlay Shader)
+│   ├── 智能体装具插槽 (Agent Harness Slots)
+│   ├── 算子执行流与遥测视窗 (Execution Telemetry Stream)
+│   └── 终端状态与管线控制器 (Pipeline Controller)
+│
+└── 宿主层 (Rust + Tauri 2.0)
+    ├── 编排引擎 (orchestration.rs): DAG 级联调度与进度事件广播
+    ├── 消息拓扑适配器 (messages.rs): 跨智能体上下文重构
+    ├── API 通讯总线 (ai_client.rs): OpenAI 兼容协议适配器
+    └── 原子状态持久化 (storage.rs): 应用配置与会话存储
 ```

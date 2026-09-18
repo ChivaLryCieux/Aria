@@ -39,14 +39,14 @@ fn default_settings() -> AppSettings {
 
 fn default_profile() -> AiProfile {
     AiProfile {
-        id: "default-assistant".to_string(),
-        name: "Hyacinth".to_string(),
-        avatar: "H".to_string(),
+        id: "aria-prime".to_string(),
+        name: "Aria Prime".to_string(),
+        avatar: "ARIA".to_string(),
         endpoint: "https://api.openai.com/v1/chat/completions".to_string(),
         api_key: String::new(),
         model: "gpt-4o-mini".to_string(),
-        system_prompt: "你是一个简洁、可靠的 AI 助手。".to_string(),
-        temperature: 0.7,
+        system_prompt: "你是 Aria 智役终端的主控智能体（Aria Prime）。作为装具中枢，你冷静、精确、恪守事实，提供高信息密度、逻辑严谨的工程与技术分析。".to_string(),
+        temperature: 0.5,
     }
 }
 
@@ -130,12 +130,12 @@ pub fn clear_history(app: &AppHandle) -> Result<(), String> {
 pub fn create_profile() -> AiProfile {
     AiProfile {
         id: Uuid::new_v4().to_string(),
-        name: "新 AI".to_string(),
-        avatar: "AI".to_string(),
+        name: "Agent Node".to_string(),
+        avatar: "NODE".to_string(),
         endpoint: "https://api.openai.com/v1/chat/completions".to_string(),
         api_key: String::new(),
         model: "gpt-4o-mini".to_string(),
-        system_prompt: "你是一个简洁、可靠的 AI 助手。".to_string(),
-        temperature: 0.7,
+        system_prompt: "你是搭载于 Aria 智役终端的高效工程智能体，专注于结构化分析与解决问题。".to_string(),
+        temperature: 0.5,
     }
 }

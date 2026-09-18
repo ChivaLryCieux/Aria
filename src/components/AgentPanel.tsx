@@ -16,28 +16,28 @@ const AgentPanelComponent = ({ profiles, activeIds, onAdd, onRemove, onToggle, o
     <div className="panel-content">
       <div className="panel-head">
         <div>
-          <p className="eyebrow">Agents</p>
-          <h2>AI 管理</h2>
+          <p className="eyebrow">AGENT HARNESS SLOTS</p>
+          <h2>装具算子配置</h2>
         </div>
         <button className="secondary" onClick={onAdd}>
-          添加
+          + 挂载槽位
         </button>
       </div>
 
-      {profiles.map((profile) => (
-        <section className="profile-card" key={profile.id}>
+      {profiles.map((profile, index) => (
+        <section className={`profile-card ${activeIds.includes(profile.id) ? "active-slot" : ""}`} key={profile.id}>
           <div className="profile-card-head">
             <label className="toggle-row">
               <input type="checkbox" checked={activeIds.includes(profile.id)} onChange={() => onToggle(profile.id)} />
-              参与当前对话
+              <span>SLOT-{String(index + 1).padStart(2, "0")} // 激活调度</span>
             </label>
             <button className="danger" onClick={() => onRemove(profile.id)}>
-              删除
+              卸载
             </button>
           </div>
 
-          <Field label="名称" value={profile.name} onChange={(name) => onUpdate(profile.id, { name })} />
-          <Field label="头像文字或图片地址" value={profile.avatar} onChange={(avatar) => onUpdate(profile.id, { avatar })} />
+          <Field label="算子代号 (OPERATOR_NAME)" value={profile.name} onChange={(name) => onUpdate(profile.id, { name })} />
+          <Field label="标识标识符 (AVATAR / EMBLEM)" value={profile.avatar} onChange={(avatar) => onUpdate(profile.id, { avatar })} />
 
           <label className="field">
             <span>上传头像图片</span>
@@ -55,15 +55,15 @@ const AgentPanelComponent = ({ profiles, activeIds, onAdd, onRemove, onToggle, o
           </label>
 
           <Field
-            label="API 地址或 Base URL"
+            label="API 端点 (BASE_URL / ENDPOINT)"
             value={profile.endpoint}
             onChange={(endpoint) => onUpdate(profile.id, { endpoint })}
           />
-          <Field label="API Key" type="password" value={profile.apiKey} onChange={(apiKey) => onUpdate(profile.id, { apiKey })} />
-          <Field label="模型" value={profile.model} onChange={(model) => onUpdate(profile.id, { model })} />
+          <Field label="访问凭据密钥 (API_KEY)" type="password" value={profile.apiKey} onChange={(apiKey) => onUpdate(profile.id, { apiKey })} />
+          <Field label="目标模型架构 (MODEL_ID)" value={profile.model} onChange={(model) => onUpdate(profile.id, { model })} />
 
           <label className="field">
-            <span>系统提示词</span>
+            <span>节点固化指令集 (SYSTEM_PROMPT)</span>
             <textarea
               value={profile.systemPrompt}
               onChange={(event) => onUpdate(profile.id, { systemPrompt: event.target.value })}
@@ -72,7 +72,7 @@ const AgentPanelComponent = ({ profiles, activeIds, onAdd, onRemove, onToggle, o
           </label>
 
           <label className="field">
-            <span>温度 {profile.temperature.toFixed(1)}</span>
+            <span>采样温度 (TEMPERATURE: {profile.temperature.toFixed(1)})</span>
             <input
               type="range"
               min="0"

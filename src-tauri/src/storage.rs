@@ -10,7 +10,7 @@ const HISTORY_FILE: &str = "chat_history.json";
 
 // ─── Paths ─────────────────────────────────────────────────────
 
-fn config_dir(app: &AppHandle) -> Result<PathBuf, String> {
+pub fn config_dir(app: &AppHandle) -> Result<PathBuf, String> {
     let dir = app
         .path()
         .app_config_dir()

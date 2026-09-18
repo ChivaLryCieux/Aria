@@ -97,3 +97,52 @@ pub async fn get_harness_connection(
     let daemon = state.daemon.lock().await;
     Ok(daemon.connection.clone())
 }
+
+// ─── Native System Bridges ─────────────────────────────────────
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SystemTelemetry {
+    pub os: String,
+    pub arch: String,
+    pub core_count: usize,
+    pub hostname: String,
+    pub app_version: String,
+}
+
+#[tauri::command]
+pub fn get_system_telemetry() -> SystemTelemetry {
+    let cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
+    let host = std::env::var("COMPUTERNAME")
+        .or_else(|_| std::env::var("HOSTNAME"))
+        .unwrap_or_else(|_| "ARIA-TERMINAL".to_string());
+
+    SystemTelemetry {
+        os: std::env::consts::OS.to_string(),
+        arch: std::env::consts::ARCH.to_string(),
+        core_count: cores,
+        hostname: host,
+        app_version: env!("CARGO_PKG_VERSION").to_string(),
+    }
+}
+
+#[tauri::command]
+pub fn open_path_in_explorer(path: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("无法打开目录: {e}"))?;
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = path;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_default_workspace_path(app: AppHandle) -> Result<String, String> {
+    storage::config_dir(&app).map(|p| p.to_string_lossy().to_string())
+}

@@ -36,6 +36,9 @@ pub fn run() {
             commands::start_harness_daemon,
             commands::stop_harness_daemon,
             commands::get_harness_connection,
+            commands::get_system_telemetry,
+            commands::open_path_in_explorer,
+            commands::get_default_workspace_path,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Aria");

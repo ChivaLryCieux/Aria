@@ -1,4 +1,5 @@
 ﻿import { AriaTelemetryService } from './telemetry.ts';
+import { AriaOrchestrationService } from './orchestration.ts';
 import { createAriaDesktopTools } from './tools.ts';
 
 export interface AriaPluginConfig {
@@ -9,8 +10,10 @@ export interface AriaPluginConfig {
 
 export function apply(ctx: any, config: AriaPluginConfig = {}) {
   const telemetry = new AriaTelemetryService();
+  const orchestration = new AriaOrchestrationService();
 
   ctx.ariaTelemetry = telemetry;
+  ctx.ariaOrchestration = orchestration;
 
   console.log([ARIA_DSH_PLUGIN] Initialized for  in  mode.);
 
@@ -26,7 +29,7 @@ export function apply(ctx: any, config: AriaPluginConfig = {}) {
       telemetry.record({
         stageTitle: 'STEP_EXECUTION',
         status: 'running',
-        message: 'Agent step started',
+        message: 'Agent step started in DSH harness',
       });
       return typeof next === 'function' ? next() : undefined;
     });
@@ -35,7 +38,7 @@ export function apply(ctx: any, config: AriaPluginConfig = {}) {
       telemetry.record({
         stageTitle: 'TURN_SETTLEMENT',
         status: 'completed',
-        message: 'Agent turn completed and settled',
+        message: 'Agent turn completed and settled in DSH harness',
       });
     });
   }
@@ -46,4 +49,5 @@ export function apply(ctx: any, config: AriaPluginConfig = {}) {
 }
 
 export * from './telemetry.ts';
+export * from './orchestration.ts';
 export * from './tools.ts';

@@ -168,3 +168,47 @@ pub fn close_window(window: tauri::Window) -> Result<(), String> {
     window.close().map_err(|e| e.to_string())
 }
 
+// ─── Token Statistics ──────────────────────────────────────────
+
+#[tauri::command]
+pub fn get_token_statistics(app: AppHandle) -> crate::tokens::TokenMetrics {
+    crate::tokens::load_metrics(&app)
+}
+
+#[tauri::command]
+pub fn reset_token_statistics(app: AppHandle) -> Result<crate::tokens::TokenMetrics, String> {
+    crate::tokens::reset_metrics(&app)
+}
+
+// ─── Multi-Session Storage ─────────────────────────────────────
+
+#[tauri::command]
+pub fn list_sessions(app: AppHandle) -> Result<Vec<storage::SessionSummary>, String> {
+    storage::list_sessions(&app)
+}
+
+#[tauri::command]
+pub fn create_session(app: AppHandle, title: Option<String>) -> Result<storage::SessionSummary, String> {
+    let t = title.unwrap_or_default();
+    storage::create_session(&app, &t)
+}
+
+#[tauri::command]
+pub fn load_session_messages(app: AppHandle, session_id: String) -> Result<Vec<ChatMessage>, String> {
+    storage::load_session_messages(&app, &session_id)
+}
+
+#[tauri::command]
+pub fn save_session_messages(
+    app: AppHandle,
+    session_id: String,
+    messages: Vec<ChatMessage>,
+) -> Result<(), String> {
+    storage::save_session_messages(&app, &session_id, &messages)
+}
+
+#[tauri::command]
+pub fn delete_session(app: AppHandle, session_id: String) -> Result<(), String> {
+    storage::delete_session(&app, &session_id)
+}
+

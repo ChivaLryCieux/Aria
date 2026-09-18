@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { AppSettings, AiProfile } from "../types/chat";
+import { useState, useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { AppSettings, AiProfile, TokenMetrics } from "../types/chat";
 
 type SettingsTab = "general" | "appearance" | "model" | "tokens";
 
@@ -29,6 +30,24 @@ export function SettingsView({
   );
   const [themeMode, setThemeMode] = useState<"light" | "system" | "dark">("light");
   const [fontSize, setFontSize] = useState<"13px" | "14px" | "15px">("14px");
+  const [tokenMetrics, setTokenMetrics] = useState<TokenMetrics | null>(null);
+
+  useEffect(() => {
+    if (activeTab === "tokens") {
+      invoke<TokenMetrics>("get_token_statistics")
+        .then((data) => setTokenMetrics(data))
+        .catch((err) => console.error("获取词元统计失败:", err));
+    }
+  }, [activeTab]);
+
+  const handleResetTokens = async () => {
+    try {
+      const reset = await invoke<TokenMetrics>("reset_token_statistics");
+      setTokenMetrics(reset);
+    } catch (err) {
+      console.error("重置词元统计失败:", err);
+    }
+  };
 
   const currentProfile =
     settings.aiProfiles.find((p) => p.id === activeProfileId) ||
@@ -478,34 +497,54 @@ export function SettingsView({
         {/* ========================================================= */}
         {activeTab === "tokens" && (
           <div className="settings-tab-pane">
-            <div className="pane-header">
-              <h2 className="pane-title">词元统计</h2>
-              <p className="pane-subtitle">监控各智能体模型 Token 吞吐量、推理耗时与成本估算明细。</p>
+            <div className="pane-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div>
+                <h2 className="pane-title">词元统计</h2>
+                <p className="pane-subtitle">监控各智能体模型 Token 吞吐量、推理耗时与成本估算明细。</p>
+              </div>
+              <button
+                type="button"
+                className="zcode-btn-secondary small"
+                onClick={handleResetTokens}
+                title="清空并重置所有词元统计数据"
+              >
+                重置统计
+              </button>
             </div>
 
             {/* Metric Overview Cards */}
             <div className="stats-metric-grid">
               <div className="metric-card">
                 <span className="metric-label">输入 Prompt Tokens</span>
-                <span className="metric-value">128,450</span>
-                <span className="metric-trend text-success">↑ 较昨日 +12%</span>
+                <span className="metric-value">
+                  {tokenMetrics ? tokenMetrics.totalPromptTokens.toLocaleString() : "0"}
+                </span>
+                <span className="metric-trend text-success">原生 Rust BPE/CJK 高精估算</span>
               </div>
 
               <div className="metric-card">
                 <span className="metric-label">生成 Completion Tokens</span>
-                <span className="metric-value">46,230</span>
-                <span className="metric-trend text-success">↑ 深度推演 8 次</span>
+                <span className="metric-value">
+                  {tokenMetrics ? tokenMetrics.totalCompletionTokens.toLocaleString() : "0"}
+                </span>
+                <span className="metric-trend text-success">实时追踪</span>
               </div>
 
               <div className="metric-card">
                 <span className="metric-label">总调度请求次数</span>
-                <span className="metric-value">84 次</span>
-                <span className="metric-trend">成功率 100%</span>
+                <span className="metric-value">
+                  {tokenMetrics ? `${tokenMetrics.totalRequests} 次` : "0 次"}
+                </span>
+                <span className="metric-trend">安全审计记录</span>
               </div>
 
               <div className="metric-card">
                 <span className="metric-label">平均响应延迟</span>
-                <span className="metric-value">620 ms</span>
+                <span className="metric-value">
+                  {tokenMetrics && tokenMetrics.totalRequests > 0
+                    ? `${Math.round(tokenMetrics.totalLatencyMs / tokenMetrics.totalRequests)} ms`
+                    : "0 ms"}
+                </span>
                 <span className="metric-trend">极速吞吐</span>
               </div>
             </div>
@@ -520,30 +559,30 @@ export function SettingsView({
                   <span>模型名称</span>
                   <span>输入 Tokens</span>
                   <span>输出 Tokens</span>
+                  <span>调用次数</span>
                   <span>平均延迟</span>
                   <span>状态</span>
                 </div>
-                <div className="model-row-item">
-                  <span className="model-title">deepseek-flash</span>
-                  <span>82,100</span>
-                  <span>24,500</span>
-                  <span>380ms</span>
-                  <span className="status-badge active">活跃</span>
-                </div>
-                <div className="model-row-item">
-                  <span className="model-title">deepseek-chat</span>
-                  <span>34,120</span>
-                  <span>12,800</span>
-                  <span>650ms</span>
-                  <span className="status-badge active">就绪</span>
-                </div>
-                <div className="model-row-item">
-                  <span className="model-title">deepseek-reasoner</span>
-                  <span>12,230</span>
-                  <span>8,930</span>
-                  <span>1,420ms</span>
-                  <span className="status-badge active">思考算子</span>
-                </div>
+                {tokenMetrics && tokenMetrics.models.length > 0 ? (
+                  tokenMetrics.models.map((m) => (
+                    <div key={m.modelName} className="model-row-item">
+                      <span className="model-title">{m.modelName}</span>
+                      <span>{m.promptTokens.toLocaleString()}</span>
+                      <span>{m.completionTokens.toLocaleString()}</span>
+                      <span>{m.requestCount} 次</span>
+                      <span>
+                        {m.requestCount > 0
+                          ? `${Math.round(m.totalLatencyMs / m.requestCount)} ms`
+                          : "-"}
+                      </span>
+                      <span className="status-badge active">就绪</span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="model-row-item" style={{ color: "var(--zcode-text-tertiary)", justifyContent: "center", padding: "16px" }}>
+                    暂无模型调度记录
+                  </div>
+                )}
               </div>
             </div>
           </div>

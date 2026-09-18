@@ -5,6 +5,7 @@ mod messages;
 mod models;
 mod orchestration;
 mod storage;
+pub mod tokens;
 
 use std::sync::Arc;
 use reqwest::Client;
@@ -42,7 +43,15 @@ pub fn run() {
             commands::minimize_window,
             commands::toggle_maximize_window,
             commands::close_window,
+            commands::get_token_statistics,
+            commands::reset_token_statistics,
+            commands::list_sessions,
+            commands::create_session,
+            commands::load_session_messages,
+            commands::save_session_messages,
+            commands::delete_session,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Aria");
 }
+

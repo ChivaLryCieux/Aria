@@ -54,3 +54,27 @@ export type OrchestrationProgressEvent = {
   content?: string;
   messageId?: string;
 };
+
+export type ModelUsageStats = {
+  modelName: string;
+  promptTokens: number;
+  completionTokens: number;
+  requestCount: number;
+  totalLatencyMs: number;
+};
+
+export type TokenMetrics = {
+  totalPromptTokens: number;
+  totalCompletionTokens: number;
+  totalRequests: number;
+  totalLatencyMs: number;
+  models: ModelUsageStats[];
+};
+
+export type SessionSummary = {
+  id: string;
+  title: string;
+  updatedAt: number;
+  messageCount: number;
+};
+

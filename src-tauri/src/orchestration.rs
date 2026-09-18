@@ -153,13 +153,28 @@ async fn execute_dag(
         let mut context: Vec<ChatMessage> = base_messages.to_vec();
         context.extend(completed_replies.clone());
 
-        let api_messages = to_api_messages(&context, Some(&stage.profile));
         let augmented_profile = with_stage_instruction(&stage.profile, stage);
+        let api_messages = to_api_messages(&context, Some(&augmented_profile));
+        let start_time = std::time::Instant::now();
+        let prompt_tokens = context.iter().map(|m| crate::tokens::estimate_tokens(&m.content)).sum::<usize>();
 
-        let result = send_openai_compatible(http, &augmented_profile, &api_messages).await;
+        let timeout_fut = tokio::time::timeout(
+            std::time::Duration::from_secs(60),
+            send_openai_compatible(http, &augmented_profile, &api_messages),
+        );
+
+        let result = match timeout_fut.await {
+            Ok(inner_res) => inner_res,
+            Err(_) => Err(anyhow::anyhow!("节点执行超时 (60s 熔断保护)")),
+        };
+
+        let latency = start_time.elapsed().as_millis() as u64;
 
         match result {
             Ok(response) => {
+                let completion_tokens = crate::tokens::estimate_tokens(&response.content);
+                crate::tokens::record_usage(app, &stage.profile.model, prompt_tokens, completion_tokens, latency);
+
                 let reply = ChatMessage {
                     id: message_id,
                     role: "assistant".to_string(),

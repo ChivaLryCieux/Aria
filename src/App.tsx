@@ -12,6 +12,7 @@ import {
   ChatMessage,
   OrchestrationProgressEvent,
   OrchestrationStage,
+  SessionSummary,
 } from "./types/chat";
 import { createPendingMessages } from "./utils/messages";
 import { dshClient } from "./services/dshClient";
@@ -19,6 +20,8 @@ import { dshClient } from "./services/dshClient";
 export function App() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [activeProfileId, setActiveProfileId] = useState<string>("");
   const [selectedModel, setSelectedModel] = useState<string>("deepseek-flash");
   const [draft, setDraft] = useState<string>("");
@@ -32,7 +35,7 @@ export function App() {
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const messageEndRef = useRef<HTMLDivElement | null>(null);
 
-  // ── Load Settings & History ──────────────────────────────────
+  // ── Load Settings, Sessions & History ────────────────────────
   useEffect(() => {
     invoke<AppSettings>("load_settings")
       .then((loaded) => {
@@ -50,9 +53,40 @@ export function App() {
       })
       .catch(console.error);
 
-    invoke<ChatMessage[]>("load_history")
-      .then((cached) => {
-        if (cached && cached.length > 0) setMessages(cached);
+    invoke<SessionSummary[]>("list_sessions")
+      .then((sessionList) => {
+        if (sessionList && sessionList.length > 0) {
+          setSessions(sessionList);
+          const first = sessionList[0];
+          setActiveSessionId(first.id);
+          invoke<ChatMessage[]>("load_session_messages", { sessionId: first.id })
+            .then((loadedMsgs) => {
+              if (loadedMsgs && loadedMsgs.length > 0) setMessages(loadedMsgs);
+            })
+            .catch(console.error);
+        } else {
+          // Fallback to legacy history if any
+          invoke<ChatMessage[]>("load_history")
+            .then(async (cached) => {
+              if (cached && cached.length > 0) {
+                try {
+                  const firstUser = cached.find((m) => m.role === "user");
+                  const title = firstUser ? firstUser.content.slice(0, 20) : "历史任务";
+                  const created = await invoke<SessionSummary>("create_session", { title });
+                  await invoke("save_session_messages", {
+                    sessionId: created.id,
+                    messages: cached,
+                  });
+                  setSessions([created]);
+                  setActiveSessionId(created.id);
+                  setMessages(cached);
+                } catch {
+                  setMessages(cached);
+                }
+              }
+            })
+            .catch(console.error);
+        }
       })
       .catch(console.error);
 
@@ -73,17 +107,27 @@ export function App() {
 
   // ── Persist chat history (debounced) ─────────────────────────
   useEffect(() => {
-    if (!settings) return;
+    if (!settings || messages.length === 0) return;
     if (saveTimeoutRef.current !== undefined) {
       clearTimeout(saveTimeoutRef.current);
     }
     const timeoutId = setTimeout(() => {
-      if (messages.length > 0) {
-        invoke("save_history", { messages }).catch(console.error);
+      if (activeSessionId) {
+        invoke("save_session_messages", {
+          sessionId: activeSessionId,
+          messages,
+        })
+          .then(() => {
+            invoke<SessionSummary[]>("list_sessions")
+              .then(setSessions)
+              .catch(console.error);
+          })
+          .catch(console.error);
       }
+      invoke("save_history", { messages }).catch(console.error);
     }, 500);
     saveTimeoutRef.current = timeoutId;
-  }, [messages, settings]);
+  }, [messages, activeSessionId, settings]);
 
   // ── Derived active profile ───────────────────────────────────
   const activeProfile = useMemo(() => {
@@ -117,6 +161,8 @@ export function App() {
   // ── Clear History ────────────────────────────────────────────
   const handleClearHistory = async () => {
     setMessages([]);
+    setActiveSessionId(null);
+    setSessions([]);
     try {
       await invoke("clear_history");
     } catch (err) {
@@ -126,8 +172,40 @@ export function App() {
 
   // ── Start New Task ───────────────────────────────────────────
   const handleNewTask = () => {
+    setActiveSessionId(null);
     setMessages([]);
     setDraft("");
+  };
+
+  // ── Select Existing Session ──────────────────────────────────
+  const handleSelectSession = async (sessionId: string) => {
+    if (sessionId === activeSessionId) return;
+    try {
+      const msgs = await invoke<ChatMessage[]>("load_session_messages", { sessionId });
+      setActiveSessionId(sessionId);
+      setMessages(msgs || []);
+    } catch (err) {
+      console.error("加载会话失败:", err);
+    }
+  };
+
+  // ── Delete Session ───────────────────────────────────────────
+  const handleDeleteSession = async (sessionId: string) => {
+    try {
+      await invoke("delete_session", { sessionId });
+      const updated = sessions.filter((s) => s.id !== sessionId);
+      setSessions(updated);
+      if (activeSessionId === sessionId) {
+        if (updated.length > 0) {
+          handleSelectSession(updated[0].id);
+        } else {
+          setActiveSessionId(null);
+          setMessages([]);
+        }
+      }
+    } catch (err) {
+      console.error("删除会话失败:", err);
+    }
   };
 
   // ── Open Workspace Directory ─────────────────────────────────
@@ -143,6 +221,19 @@ export function App() {
   // ── Send Message ─────────────────────────────────────────────
   const handleSend = async () => {
     if (!draft.trim() || !activeProfile || !settings || isSending) return;
+
+    let curSessionId = activeSessionId;
+    if (!curSessionId) {
+      try {
+        const title = draft.trim().slice(0, 20);
+        const created = await invoke<SessionSummary>("create_session", { title });
+        curSessionId = created.id;
+        setActiveSessionId(curSessionId);
+        setSessions((prev) => [created, ...prev.filter((s) => s.id !== created.id)]);
+      } catch (err) {
+        console.error("无法创建新会话:", err);
+      }
+    }
 
     const userMessage = createUserMessage(draft.trim(), settings.userName || "Tempsyche");
     const baseMessages = [...messages, userMessage];
@@ -182,7 +273,19 @@ export function App() {
       });
 
       unlisten();
-      setMessages([...baseMessages, ...finalReplies]);
+      const updatedMessages = [...baseMessages, ...finalReplies];
+      setMessages(updatedMessages);
+
+      if (curSessionId) {
+        invoke("save_session_messages", {
+          sessionId: curSessionId,
+          messages: updatedMessages,
+        })
+          .then(() => {
+            invoke<SessionSummary[]>("list_sessions").then(setSessions).catch(console.error);
+          })
+          .catch(console.error);
+      }
     } catch (error) {
       setMessages((prev) =>
         prev.map((msg) =>
@@ -201,17 +304,14 @@ export function App() {
     }
   };
 
-  // ── Tasks list for sidebar (derived from first user prompt) ──
-  const taskSummaries: TaskSummary[] = useMemo(() => {
-    if (messages.length === 0) return [];
-    const firstUserMsg = messages.find((m) => m.role === "user");
-    return [
-      {
-        id: "current-task",
-        title: firstUserMsg ? firstUserMsg.content.slice(0, 24) : "当前任务",
-      },
-    ];
-  }, [messages]);
+  // ── Tasks list for sidebar from native sessions ──────────────
+  const sidebarTasks: TaskSummary[] = useMemo(() => {
+    return sessions.map((s) => ({
+      id: s.id,
+      title: s.title,
+      timestamp: s.updatedAt,
+    }));
+  }, [sessions]);
 
   // ── Keyboard shortcuts (Ctrl+N, Ctrl+K) ──────────────────────
   useEffect(() => {
@@ -273,8 +373,10 @@ export function App() {
             onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
             onNewTask={handleNewTask}
             onOpenSettings={() => setCurrentView("settings")}
-            tasks={taskSummaries}
-            activeTaskId={messages.length > 0 ? "current-task" : undefined}
+            tasks={sidebarTasks}
+            activeTaskId={activeSessionId || undefined}
+            onSelectTask={handleSelectSession}
+            onDeleteTask={handleDeleteSession}
             workspaceName={workspaceName}
             onOpenWorkspace={handleOpenWorkspace}
           />

@@ -120,7 +120,117 @@ pub fn save_history(app: &AppHandle, messages: &[ChatMessage]) -> Result<(), Str
 pub fn clear_history(app: &AppHandle) -> Result<(), String> {
     let path = history_path(app)?;
     if path.exists() {
-        fs::remove_file(&path).map_err(|err| format!("无法清空聊天记录: {err}"))?;
+        let _ = fs::remove_file(&path);
+    }
+    let s_dir = sessions_dir(app)?;
+    if s_dir.exists() {
+        let _ = fs::remove_dir_all(&s_dir);
+    }
+    Ok(())
+}
+
+// ─── Multi-Session Structured Storage ──────────────────────────
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionSummary {
+    pub id: String,
+    pub title: String,
+    pub updated_at: u64,
+    pub message_count: usize,
+}
+
+fn sessions_dir(app: &AppHandle) -> Result<PathBuf, String> {
+    let dir = config_dir(app)?.join("sessions");
+    fs::create_dir_all(&dir).map_err(|e| format!("无法创建 sessions 目录: {e}"))?;
+    Ok(dir)
+}
+
+fn sessions_index_path(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(sessions_dir(app)?.join("index.json"))
+}
+
+pub fn list_sessions(app: &AppHandle) -> Result<Vec<SessionSummary>, String> {
+    let path = sessions_index_path(app)?;
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+    let text = fs::read_to_string(&path).map_err(|e| format!("无法读取会话索引: {e}"))?;
+    serde_json::from_str(&text).map_err(|e| format!("会话索引格式无效: {e}"))
+}
+
+pub fn save_session_index(app: &AppHandle, sessions: &[SessionSummary]) -> Result<(), String> {
+    let path = sessions_index_path(app)?;
+    let text = serde_json::to_string_pretty(sessions).map_err(|e| format!("序列化会话失败: {e}"))?;
+    fs::write(path, text).map_err(|e| format!("保存会话索引失败: {e}"))
+}
+
+pub fn create_session(app: &AppHandle, title: &str) -> Result<SessionSummary, String> {
+    let mut sessions = list_sessions(app).unwrap_or_default();
+    let id = Uuid::new_v4().to_string();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+
+    let summary = SessionSummary {
+        id: id.clone(),
+        title: if title.trim().is_empty() { "新任务".to_string() } else { title.trim().to_string() },
+        updated_at: now,
+        message_count: 0,
+    };
+
+    sessions.insert(0, summary.clone());
+    save_session_index(app, &sessions)?;
+    save_session_messages(app, &id, &[])?;
+
+    Ok(summary)
+}
+
+pub fn load_session_messages(app: &AppHandle, session_id: &str) -> Result<Vec<ChatMessage>, String> {
+    let path = sessions_dir(app)?.join(format!("{session_id}.json"));
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+    let text = fs::read_to_string(&path).map_err(|e| format!("读取会话消息失败: {e}"))?;
+    serde_json::from_str(&text).map_err(|e| format!("消息格式无效: {e}"))
+}
+
+pub fn save_session_messages(app: &AppHandle, session_id: &str, messages: &[ChatMessage]) -> Result<(), String> {
+    let path = sessions_dir(app)?.join(format!("{session_id}.json"));
+    let text = serde_json::to_string_pretty(messages).map_err(|e| format!("序列化消息失败: {e}"))?;
+    fs::write(path, text).map_err(|e| format!("写入消息失败: {e}"))?;
+
+    // Update count in index
+    let mut sessions = list_sessions(app).unwrap_or_default();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+
+    if let Some(s) = sessions.iter_mut().find(|s| s.id == session_id) {
+        s.message_count = messages.len();
+        s.updated_at = now;
+        if s.title == "新任务" {
+            if let Some(first_user) = messages.iter().find(|m| m.role == "user") {
+                let first_line = first_user.content.lines().next().unwrap_or(&first_user.content);
+                s.title = first_line.chars().take(20).collect();
+            }
+        }
+        let _ = save_session_index(app, &sessions);
+    }
+
+    Ok(())
+}
+
+pub fn delete_session(app: &AppHandle, session_id: &str) -> Result<(), String> {
+    let mut sessions = list_sessions(app).unwrap_or_default();
+    sessions.retain(|s| s.id != session_id);
+    save_session_index(app, &sessions)?;
+
+    let path = sessions_dir(app)?.join(format!("{session_id}.json"));
+    if path.exists() {
+        let _ = fs::remove_file(path);
     }
     Ok(())
 }

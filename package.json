@@ -4,6 +4,7 @@
   "description": "Aria - 智役：咏叹终端 (AI Agent Harness Terminal)",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@11.7.0",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc && vite build",

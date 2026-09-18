@@ -1,0 +1,8 @@
+﻿{
+  "name": "@aria/desktop-host",
+  "version": "0.2.0",
+  "description": "Aria Desktop Host daemon for DSH and Tauri integration",
+  "type": "module",
+  "main": "lib/index.js",
+  "license": "MIT"
+}

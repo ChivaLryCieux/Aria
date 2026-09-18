@@ -1,4 +1,4 @@
-﻿import { AriaTelemetryService } from './telemetry.ts';
+import { AriaTelemetryService } from './telemetry.ts';
 import { AriaOrchestrationService } from './orchestration.ts';
 import { createAriaDesktopTools } from './tools.ts';
 
@@ -15,7 +15,7 @@ export function apply(ctx: any, config: AriaPluginConfig = {}) {
   ctx.ariaTelemetry = telemetry;
   ctx.ariaOrchestration = orchestration;
 
-  console.log([ARIA_DSH_PLUGIN] Initialized for  in  mode.);
+  console.log(`[ARIA_DSH_PLUGIN] Initialized for ${config.terminal || 'Aria'} in ${config.mode || 'desktop'} mode.`);
 
   if (ctx.tools && typeof ctx.tools.register === 'function') {
     const tools = createAriaDesktopTools(telemetry);

@@ -1,4 +1,4 @@
-﻿import http from 'node:http';
+import http from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import { existsSync } from 'node:fs';
@@ -45,8 +45,8 @@ const server = http.createServer((req, res) => {
       protocol: 'v1.alpha',
       authenticated: true,
       token: TOKEN,
-      url: http://System.Management.Automation.Internal.Host.InternalHost:,
-      wsUrl: ws://System.Management.Automation.Internal.Host.InternalHost:/events,
+      url: `http://${HOST}:${PORT}`,
+      wsUrl: `ws://${HOST}:${PORT}/events`,
     }));
     return;
   }
@@ -61,11 +61,11 @@ server.listen(PORT, HOST, () => {
     service: 'dsh-daemon',
     port: PORT,
     host: HOST,
-    url: http://System.Management.Automation.Internal.Host.InternalHost:,
+    url: `http://${HOST}:${PORT}`,
     token: TOKEN,
     pid: process.pid,
   };
-  console.log([ARIA_DSH_DAEMON_READY] );
+  console.log(`[ARIA_DSH_DAEMON_READY] ${JSON.stringify(signal)}`);
 });
 
 function gracefulShutdown() {

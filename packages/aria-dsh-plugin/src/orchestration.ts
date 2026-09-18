@@ -1,4 +1,4 @@
-﻿export interface DagStage {
+export interface DagStage {
   id: string;
   index: number;
   nodeTitle: string;
@@ -43,18 +43,18 @@ export class AriaOrchestrationService {
       const tpl = i < defaultTemplates.length
         ? defaultTemplates[i]
         : {
-            nodeTitle: Node- // 专项算子,
+            nodeTitle: `Node-${String(i + 1).padStart(2, '0')} // 专项算子`,
             role: '专项处理算子 (Specialist)',
             instruction: '结合前序算子输出，针对专精维度提供增量技术洞察与补充推演。',
           };
 
       stages.push({
-        id: dag-stage-,
+        id: `dag-stage-${i}`,
         index: i,
         nodeTitle: tpl.nodeTitle,
         role: tpl.role,
         instruction: tpl.instruction,
-        dependsOn: i === 0 ? [] : [dag-stage-],
+        dependsOn: i === 0 ? [] : [`dag-stage-${i - 1}`],
       });
     }
 
@@ -63,14 +63,14 @@ export class AriaOrchestrationService {
 
   buildStagePrompt(basePrompt: string, stage: DagStage): string {
     const harnessInstructions = [
-      [ARIA_HARNESS_DISPATCH // ],
-      - 算子角色: ,
-      - 调度执行指令: ,
-      - 交互准则: 保持冷静、理性、高度结构化与工业级严谨，直接输出工程与技术解析。,
+      `[ARIA_HARNESS_DISPATCH // ${stage.nodeTitle}]`,
+      `- 算子角色: ${stage.role}`,
+      `- 调度执行指令: ${stage.instruction}`,
+      `- 交互准则: 保持冷静、理性、高度结构化与工业级严谨，直接输出工程与技术解析。`,
     ].join('\n');
 
     return basePrompt.trim()
-      ? ${basePrompt}\n\n
+      ? `${basePrompt}\n\n${harnessInstructions}`
       : harnessInstructions;
   }
 

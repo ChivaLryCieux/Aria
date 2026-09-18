@@ -1,4 +1,4 @@
-﻿export interface TelemetryEvent {
+export interface TelemetryEvent {
   id: string;
   timestamp: number;
   stageId?: string;
@@ -16,7 +16,7 @@ export class AriaTelemetryService {
 
   record(event: Omit<TelemetryEvent, 'id' | 'timestamp'>): TelemetryEvent {
     const fullEvent: TelemetryEvent = {
-      id: evt--,
+      id: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       timestamp: Date.now(),
       ...event,
     };

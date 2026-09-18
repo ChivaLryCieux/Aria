@@ -71,3 +71,29 @@ pub async fn execute_orchestration(
 pub fn build_orchestration(profiles: Vec<AiProfile>) -> Vec<crate::models::OrchestrationStage> {
     orchestration::build_stages(&profiles)
 }
+
+// ─── DSH Core Daemon Controls ──────────────────────────────────
+
+#[tauri::command]
+pub async fn start_harness_daemon(
+    state: State<'_, crate::AppState>,
+) -> Result<crate::daemon::HarnessConnection, String> {
+    let mut daemon = state.daemon.lock().await;
+    daemon.start().await
+}
+
+#[tauri::command]
+pub async fn stop_harness_daemon(
+    state: State<'_, crate::AppState>,
+) -> Result<(), String> {
+    let mut daemon = state.daemon.lock().await;
+    daemon.stop().await
+}
+
+#[tauri::command]
+pub async fn get_harness_connection(
+    state: State<'_, crate::AppState>,
+) -> Result<crate::daemon::HarnessConnection, String> {
+    let daemon = state.daemon.lock().await;
+    Ok(daemon.connection.clone())
+}

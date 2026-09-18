@@ -1,3 +1,3 @@
 fn main() {
-    hyacinth_lib::run();
+    aria_lib::run();
 }

@@ -3,6 +3,10 @@
   "version": "0.2.0",
   "description": "Aria Cordis plugins for DeepSeek Harness (DAG orchestration and telemetry)",
   "type": "module",
-  "main": "lib/index.js",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./*"
+  },
   "license": "MIT"
 }

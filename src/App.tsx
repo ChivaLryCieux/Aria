@@ -4,7 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { TopBar } from "./components/TopBar";
 import { Sidebar, TaskSummary } from "./components/Sidebar";
 import { CenterHome } from "./components/CenterHome";
-import { SettingsModal } from "./components/SettingsModal";
+import { SettingsView } from "./components/SettingsView";
 import { createUserMessage } from "./constants/defaults";
 import {
   AiProfile,
@@ -24,7 +24,7 @@ export function App() {
   const [draft, setDraft] = useState<string>("");
   const [isSending, setIsSending] = useState<boolean>(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
-  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [currentView, setCurrentView] = useState<"workspace" | "settings">("workspace");
   const [isHelpOpen, setIsHelpOpen] = useState<boolean>(false);
   const [workspacePath, setWorkspacePath] = useState<string>("");
   const [orchestrationStages, setOrchestrationStages] = useState<OrchestrationStage[]>([]);
@@ -238,116 +238,125 @@ export function App() {
     <div className="app-container">
       {/* 1:1 Top Bar */}
       <TopBar
-        onNewTerminal={handleNewTask}
+        onNewTerminal={() => {
+          setCurrentView("workspace");
+          handleNewTask();
+        }}
         onOpenHelp={() => setIsHelpOpen(true)}
-        canGoBack={messages.length > 0}
+        canGoBack={messages.length > 0 || currentView === "settings"}
         canGoForward={false}
-        onGoBack={handleNewTask}
+        onGoBack={() => {
+          if (currentView === "settings") {
+            setCurrentView("workspace");
+          } else {
+            handleNewTask();
+          }
+        }}
       />
 
-      {/* Main Workspace Body */}
-      <div className="workspace-body">
-        {/* 1:1 Left Sidebar */}
-        <Sidebar
-          userName={settings?.userName || "Tempsyche"}
-          isCollapsed={isSidebarCollapsed}
-          onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
-          onNewTask={handleNewTask}
-          onOpenSettings={() => setIsSettingsOpen(true)}
-          tasks={taskSummaries}
-          activeTaskId={messages.length > 0 ? "current-task" : undefined}
-          workspaceName={workspaceName}
+      {currentView === "settings" && settings ? (
+        <SettingsView
+          onBack={() => setCurrentView("workspace")}
+          settings={settings}
+          onSaveSettings={handleSaveSettings}
+          onClearHistory={handleClearHistory}
+          workspacePath={workspacePath}
           onOpenWorkspace={handleOpenWorkspace}
         />
+      ) : (
+        /* Main Workspace Body */
+        <div className="workspace-body">
+          {/* 1:1 Left Sidebar */}
+          <Sidebar
+            userName={settings?.userName || "Tempsyche"}
+            isCollapsed={isSidebarCollapsed}
+            onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
+            onNewTask={handleNewTask}
+            onOpenSettings={() => setCurrentView("settings")}
+            tasks={taskSummaries}
+            activeTaskId={messages.length > 0 ? "current-task" : undefined}
+            workspaceName={workspaceName}
+            onOpenWorkspace={handleOpenWorkspace}
+          />
 
-        {/* Center Stage Canvas */}
-        <main className="stage-container">
-          {messages.length === 0 ? (
-            /* Home / Greeting Stage (Exact 1:1 match to screenshot) */
-            <CenterHome
-              draft={draft}
-              setDraft={setDraft}
-              onSend={handleSend}
-              isSending={isSending}
-              profiles={settings?.aiProfiles || []}
-              selectedProfileId={activeProfileId}
-              onSelectProfile={setActiveProfileId}
-              selectedModel={selectedModel}
-              onSelectModel={setSelectedModel}
-              workspaceName={workspaceName}
-              onOpenWorkspace={handleOpenWorkspace}
-            />
-          ) : (
-            /* Active Conversation View */
-            <div className="chat-conversation-view">
-              <div className="chat-message-stream">
-                {messages.map((msg) => (
-                  <div key={msg.id} className={`message-bubble-row ${msg.role}`}>
-                    <div className="bubble-body">
-                      {msg.role === "assistant" && (
-                        <div className="speaker-header">
-                          <span className="node-badge">ZCode // {msg.speakerName}</span>
-                          {msg.pending && <span>思考生成中...</span>}
-                        </div>
-                      )}
-                      <div style={{ whiteSpace: "pre-wrap" }}>{msg.content}</div>
+          {/* Center Stage Canvas */}
+          <main className="stage-container">
+            {messages.length === 0 ? (
+              /* Home / Greeting Stage (Exact 1:1 match to screenshot) */
+              <CenterHome
+                draft={draft}
+                setDraft={setDraft}
+                onSend={handleSend}
+                isSending={isSending}
+                profiles={settings?.aiProfiles || []}
+                selectedProfileId={activeProfileId}
+                onSelectProfile={setActiveProfileId}
+                selectedModel={selectedModel}
+                onSelectModel={setSelectedModel}
+                workspaceName={workspaceName}
+                onOpenWorkspace={handleOpenWorkspace}
+              />
+            ) : (
+              /* Active Conversation View */
+              <div className="chat-conversation-view">
+                <div className="chat-message-stream">
+                  {messages.map((msg) => (
+                    <div key={msg.id} className={`message-bubble-row ${msg.role}`}>
+                      <div className="bubble-body">
+                        {msg.role === "assistant" && (
+                          <div className="speaker-header">
+                            <span className="node-badge">ZCode // {msg.speakerName}</span>
+                            {msg.pending && <span>思考生成中...</span>}
+                          </div>
+                        )}
+                        <div style={{ whiteSpace: "pre-wrap" }}>{msg.content}</div>
+                      </div>
                     </div>
-                  </div>
-                ))}
-                <div ref={messageEndRef} />
-              </div>
+                  ))}
+                  <div ref={messageEndRef} />
+                </div>
 
-              {/* Bottom Docked Input Box in Active Chat */}
-              <div className="chat-docked-input">
-                <div className="prompt-card" style={{ width: "720px" }}>
-                  <textarea
-                    className="prompt-textarea"
-                    placeholder="向 ZCode 提问，继续跟进任务..."
-                    value={draft}
-                    onChange={(e) => setDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSend();
-                      }
-                    }}
-                    rows={2}
-                  />
-                  <div className="prompt-card-footer">
-                    <div className="footer-left-controls">
-                      <span className="model-tag-pill">ds/{selectedModel}</span>
-                    </div>
-                    <div className="footer-right-controls">
-                      <button
-                        type="button"
-                        className="send-arrow-btn"
-                        disabled={!draft.trim() || isSending}
-                        onClick={handleSend}
-                        title="发送"
-                      >
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                          <line x1="12" y1="19" x2="12" y2="5" strokeLinecap="round" />
-                          <polyline points="5 12 12 5 19 12" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      </button>
+                {/* Bottom Docked Input Box in Active Chat */}
+                <div className="chat-docked-input">
+                  <div className="prompt-card" style={{ width: "720px" }}>
+                    <textarea
+                      className="prompt-textarea"
+                      placeholder="向 ZCode 提问，继续跟进任务..."
+                      value={draft}
+                      onChange={(e) => setDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSend();
+                        }
+                      }}
+                      rows={2}
+                    />
+                    <div className="prompt-card-footer">
+                      <div className="footer-left-controls">
+                        <span className="model-tag-pill">ds/{selectedModel}</span>
+                      </div>
+                      <div className="footer-right-controls">
+                        <button
+                          type="button"
+                          className="send-arrow-btn"
+                          disabled={!draft.trim() || isSending}
+                          onClick={handleSend}
+                          title="发送"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                            <line x1="12" y1="19" x2="12" y2="5" strokeLinecap="round" />
+                            <polyline points="5 12 12 5 19 12" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
-        </main>
-      </div>
-
-      {/* Settings Modal */}
-      {settings && (
-        <SettingsModal
-          isOpen={isSettingsOpen}
-          onClose={() => setIsSettingsOpen(false)}
-          settings={settings}
-          onSave={handleSaveSettings}
-          onClearHistory={handleClearHistory}
-        />
+            )}
+          </main>
+        </div>
       )}
 
       {/* Help / Shortcuts Modal */}

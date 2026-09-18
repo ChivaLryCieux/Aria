@@ -8,6 +8,7 @@ import { createUserMessage } from "./constants/defaults";
 import { AiProfile, AppSettings, ChatMessage, OrchestrationMode, OrchestrationStage } from "./types/chat";
 import { createPendingMessages } from "./utils/messages";
 import { OrchestrationProgressEvent } from "./types/chat";
+import { dshClient, HarnessConnectionInfo } from "./services/dshClient";
 
 export function App() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -16,19 +17,26 @@ export function App() {
   const [activePanel, setActivePanel] = useState<"chat" | "agents" | "settings">("chat");
   const [isSidePanelCollapsed, setIsSidePanelCollapsed] = useState(false);
   const [draft, setDraft] = useState("");
-  const [status, setStatus] = useState("正在加载设置");
+  const [status, setStatus] = useState("HARNESS_STANDBY // 终端就绪");
   const [isSending, setIsSending] = useState(false);
   const [orchestrationStages, setOrchestrationStages] = useState<OrchestrationStage[]>([]);
+  const [harnessConn, setHarnessConn] = useState<HarnessConnectionInfo | null>(null);
+  const [systemTelemetry, setSystemTelemetry] = useState<{
+    os: string;
+    arch: string;
+    coreCount: number;
+    hostname: string;
+    appVersion: string;
+  } | null>(null);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  // ── Initialize: load settings and chat history from backend ──
+  // ── Initialize: load settings, history, DSH daemon & telemetry ──
 
   useEffect(() => {
     invoke<AppSettings>("load_settings")
       .then((loaded) => {
         setSettings(loaded);
         setActiveIds([loaded.aiProfiles[0].id]);
-        setStatus("您的智能体清醒着");
       })
       .catch((error) => {
         console.error(error);
@@ -39,6 +47,14 @@ export function App() {
       .then((cached) => {
         if (cached.length > 0) setMessages(cached);
       })
+      .catch(console.error);
+
+    // Initialize DSH Core Daemon Client
+    dshClient.init().then(setHarnessConn).catch(console.error);
+
+    // Query Native System Telemetry
+    invoke<any>("get_system_telemetry")
+      .then(setSystemTelemetry)
       .catch(console.error);
   }, []);
 
@@ -262,8 +278,16 @@ export function App() {
 
         <div className="topbar-telemetry">
           <div className="telemetry-item">
-            <span>ENV:</span>
-            <strong>WIN_DESKTOP</strong>
+            <span>SYS:</span>
+            <strong>
+              {systemTelemetry
+                ? `${systemTelemetry.os.toUpperCase()}_${systemTelemetry.arch.toUpperCase()} (${systemTelemetry.coreCount}C)`
+                : "WIN_DESKTOP"}
+            </strong>
+          </div>
+          <div className="telemetry-item">
+            <span>DSH:</span>
+            <strong>{harnessConn ? `${harnessConn.status.toUpperCase()}:${harnessConn.port}` : "STANDBY"}</strong>
           </div>
           <div className="telemetry-item">
             <span>SLOTS:</span>

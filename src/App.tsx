@@ -1,66 +1,77 @@
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import AgentPanel from "./components/AgentPanel";
-import { Avatar } from "./components/Avatar";
-import { SettingsPanel } from "./components/SettingsPanel";
-import { HarnessInspector } from "./components/HarnessInspector";
+import { TopBar } from "./components/TopBar";
+import { Sidebar, TaskSummary } from "./components/Sidebar";
+import { CenterHome } from "./components/CenterHome";
+import { SettingsModal } from "./components/SettingsModal";
 import { createUserMessage } from "./constants/defaults";
-import { AiProfile, AppSettings, ChatMessage, OrchestrationMode, OrchestrationStage } from "./types/chat";
+import {
+  AiProfile,
+  AppSettings,
+  ChatMessage,
+  OrchestrationProgressEvent,
+  OrchestrationStage,
+} from "./types/chat";
 import { createPendingMessages } from "./utils/messages";
-import { OrchestrationProgressEvent } from "./types/chat";
-import { dshClient, HarnessConnectionInfo } from "./services/dshClient";
+import { dshClient } from "./services/dshClient";
 
 export function App() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [activeIds, setActiveIds] = useState<string[]>([]);
-  const [activePanel, setActivePanel] = useState<"chat" | "agents" | "settings" | "inspector">("chat");
-  const [isSidePanelCollapsed, setIsSidePanelCollapsed] = useState(false);
-  const [draft, setDraft] = useState("");
-  const [status, setStatus] = useState("HARNESS_STANDBY // 终端就绪");
-  const [isSending, setIsSending] = useState(false);
+  const [activeProfileId, setActiveProfileId] = useState<string>("");
+  const [selectedModel, setSelectedModel] = useState<string>("deepseek-flash");
+  const [draft, setDraft] = useState<string>("");
+  const [isSending, setIsSending] = useState<boolean>(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [isHelpOpen, setIsHelpOpen] = useState<boolean>(false);
+  const [workspacePath, setWorkspacePath] = useState<string>("");
   const [orchestrationStages, setOrchestrationStages] = useState<OrchestrationStage[]>([]);
-  const [harnessConn, setHarnessConn] = useState<HarnessConnectionInfo | null>(null);
-  const [systemTelemetry, setSystemTelemetry] = useState<{
-    os: string;
-    arch: string;
-    coreCount: number;
-    hostname: string;
-    appVersion: string;
-  } | null>(null);
+
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const messageEndRef = useRef<HTMLDivElement | null>(null);
 
-  // ── Initialize: load settings, history, DSH daemon & telemetry ──
-
+  // ── Load Settings & History ──────────────────────────────────
   useEffect(() => {
     invoke<AppSettings>("load_settings")
       .then((loaded) => {
+        // Ensure default username is Tempsyche if empty
+        if (!loaded.userName || loaded.userName === "OPERATOR") {
+          loaded.userName = "Tempsyche";
+        }
         setSettings(loaded);
-        setActiveIds([loaded.aiProfiles[0].id]);
+        if (loaded.aiProfiles.length > 0) {
+          setActiveProfileId(loaded.aiProfiles[0].id);
+          if (loaded.aiProfiles[0].model) {
+            setSelectedModel(loaded.aiProfiles[0].model);
+          }
+        }
       })
-      .catch((error) => {
-        console.error(error);
-        setStatus(String(error));
-      });
+      .catch(console.error);
 
     invoke<ChatMessage[]>("load_history")
       .then((cached) => {
-        if (cached.length > 0) setMessages(cached);
+        if (cached && cached.length > 0) setMessages(cached);
       })
       .catch(console.error);
 
-    // Initialize DSH Core Daemon Client
-    dshClient.init().then(setHarnessConn).catch(console.error);
-
-    // Query Native System Telemetry
-    invoke<any>("get_system_telemetry")
-      .then(setSystemTelemetry)
+    invoke<string>("get_default_workspace_path")
+      .then(setWorkspacePath)
       .catch(console.error);
+
+    // Initialize DSH daemon client in background
+    dshClient.init().catch(console.error);
   }, []);
 
-  // ── Persist chat history to backend (debounced) ──────────────
+  // ── Auto-scroll to latest message ────────────────────────────
+  useEffect(() => {
+    if (messages.length > 0) {
+      messageEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages]);
 
+  // ── Persist chat history (debounced) ─────────────────────────
   useEffect(() => {
     if (!settings) return;
     if (saveTimeoutRef.current !== undefined) {
@@ -74,407 +85,307 @@ export function App() {
     saveTimeoutRef.current = timeoutId;
   }, [messages, settings]);
 
-  useEffect(() => {
-    return () => {
-      if (saveTimeoutRef.current !== undefined) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-    };
-  }, []);
+  // ── Derived active profile ───────────────────────────────────
+  const activeProfile = useMemo(() => {
+    return (
+      settings?.aiProfiles.find((p) => p.id === activeProfileId) ||
+      settings?.aiProfiles[0] ||
+      null
+    );
+  }, [activeProfileId, settings]);
 
-  // ── Fetch orchestration stages from backend ──────────────────
-
+  // ── Build Orchestration Stages ───────────────────────────────
   useEffect(() => {
-    if (activeProfiles.length === 0) {
-      setOrchestrationStages([]);
-      return;
-    }
-    invoke<OrchestrationStage[]>("build_orchestration", { profiles: activeProfiles })
+    if (!activeProfile || !settings) return;
+    invoke<OrchestrationStage[]>("build_orchestration", {
+      profiles: [activeProfile],
+    })
       .then(setOrchestrationStages)
       .catch(console.error);
-  }, [settings, activeIds]);
+  }, [activeProfile, settings]);
 
-  // ── Derived state ────────────────────────────────────────────
-
-  const activeProfiles = useMemo(
-    () =>
-      activeIds
-        .map((id) => settings?.aiProfiles.find((profile) => profile.id === id))
-        .filter((profile): profile is AiProfile => Boolean(profile)),
-    [activeIds, settings],
-  );
-
-  const canSend = draft.trim().length > 0 && activeProfiles.length > 0 && !isSending && settings !== null;
-
-  // ── Settings persistence ─────────────────────────────────────
-
-  async function persist(nextSettings: AppSettings) {
+  // ── Save Settings Helper ─────────────────────────────────────
+  const handleSaveSettings = async (nextSettings: AppSettings) => {
     setSettings(nextSettings);
     try {
       await invoke("save_settings", { settings: nextSettings });
-      setStatus("设置已保存");
-    } catch (error) {
-      setStatus(String(error));
+    } catch (err) {
+      console.error("Failed to save settings:", err);
     }
-  }
+  };
 
-  function updateProfile(id: string, patch: Partial<AiProfile>) {
-    if (!settings) return;
-    void persist({
-      ...settings,
-      aiProfiles: settings.aiProfiles.map((profile) => (profile.id === id ? { ...profile, ...patch } : profile)),
-    });
-  }
-
-  async function addProfile() {
-    if (!settings) return;
-    const profile = await invoke<AiProfile>("create_profile");
-    void persist({ ...settings, aiProfiles: [...settings.aiProfiles, profile] });
-    setActiveIds((ids) => [...ids, profile.id]);
-  }
-
-  function removeProfile(id: string) {
-    if (!settings) return;
-    if (settings.aiProfiles.length <= 1) {
-      setStatus("至少保留一个 AI");
-      return;
+  // ── Clear History ────────────────────────────────────────────
+  const handleClearHistory = async () => {
+    setMessages([]);
+    try {
+      await invoke("clear_history");
+    } catch (err) {
+      console.error("Failed to clear history:", err);
     }
-    void persist({
-      ...settings,
-      aiProfiles: settings.aiProfiles.filter((profile) => profile.id !== id),
-    });
-    setActiveIds((ids) => ids.filter((activeId) => activeId !== id));
-  }
+  };
 
-  function toggleActive(id: string) {
-    setActiveIds((ids) => (ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id]));
-  }
+  // ── Start New Task ───────────────────────────────────────────
+  const handleNewTask = () => {
+    setMessages([]);
+    setDraft("");
+  };
 
-  // ── Send message — delegates all orchestration to backend ────
+  // ── Open Workspace Directory ─────────────────────────────────
+  const handleOpenWorkspace = async () => {
+    try {
+      const path = workspacePath || "c:\\Users\\LRY\\Desktop\\BASE\\Aria";
+      await invoke("open_path_in_explorer", { path });
+    } catch (err) {
+      console.error("Failed to open path:", err);
+    }
+  };
 
-  async function sendMessage(event: FormEvent) {
-    event.preventDefault();
-    if (!canSend || !settings) return;
+  // ── Send Message ─────────────────────────────────────────────
+  const handleSend = async () => {
+    if (!draft.trim() || !activeProfile || !settings || isSending) return;
 
-    const userMessage = createUserMessage(draft.trim(), settings.userName);
+    const userMessage = createUserMessage(draft.trim(), settings.userName || "Tempsyche");
     const baseMessages = [...messages, userMessage];
-    const pendingMessages = createPendingMessages(activeProfiles).map((message, index) => ({
-      ...message,
-      content:
-        settings.orchestrationMode === "dag"
-          ? `[${orchestrationStages[index]?.title ?? activeProfiles[index].name}] 正在初始化算子通道...`
-          : "算子通道正在处理...",
-    }));
+    const pendingMessages = createPendingMessages([activeProfile]);
 
     setDraft("");
     setIsSending(true);
     setMessages([...baseMessages, ...pendingMessages]);
-    setStatus(settings.orchestrationMode === "dag" && activeProfiles.length > 1 ? "DAG 流水线执行中" : "通道调度中");
-
-    // Map stage.id → pending message id for progress event matching
-    const stageToPending = new Map<string, string>();
-    orchestrationStages.forEach((stage, index) => {
-      if (pendingMessages[index]) {
-        stageToPending.set(stage.id, pendingMessages[index].id);
-      }
-    });
 
     try {
-      // Listen for progress events (DAG mode emits these per stage)
-      const unlisten = await listen<OrchestrationProgressEvent>("orchestration-progress", (event) => {
-        const { stageId, stageTitle, profileName, status: eventStatus } = event.payload;
-        const pendingId = stageToPending.get(stageId);
-
-        if (eventStatus === "running") {
-          setStatus(`${stageTitle}: ${profileName} 推进中`);
-          if (pendingId) {
+      const unlisten = await listen<OrchestrationProgressEvent>(
+        "orchestration-progress",
+        (event) => {
+          const { stageTitle, status: eventStatus } = event.payload;
+          if (eventStatus === "running") {
             setMessages((prev) =>
-              prev.map((msg) => (msg.id === pendingId ? { ...msg, content: `[${stageTitle}] 算子解析中...` } : msg)),
+              prev.map((msg) =>
+                msg.pending ? { ...msg, content: `[${stageTitle}] 正在解析推演中...` } : msg
+              )
             );
           }
         }
-      });
+      );
 
-      const finalMessages = await invoke<ChatMessage[]>("execute_orchestration", {
+      // Execute request
+      const finalReplies = await invoke<ChatMessage[]>("execute_orchestration", {
         request: {
-          profiles: activeProfiles,
+          profiles: [
+            {
+              ...activeProfile,
+              model: selectedModel || activeProfile.model,
+            },
+          ],
           messages: baseMessages,
           mode: settings.orchestrationMode,
         },
       });
 
       unlisten();
-
-      // Replace pending messages with final results
-      setMessages([...baseMessages, ...finalMessages]);
+      setMessages([...baseMessages, ...finalReplies]);
     } catch (error) {
-      // Mark all pending messages as errors
       setMessages((prev) =>
         prev.map((msg) =>
-          msg.pending ? { ...msg, content: `[DISPATCH_ERROR] ${String(error)}`, pending: false, error: true } : msg,
-        ),
+          msg.pending
+            ? {
+                ...msg,
+                content: `[调度执行异常] ${String(error)}`,
+                pending: false,
+                error: true,
+              }
+            : msg
+        )
       );
     } finally {
       setIsSending(false);
-      setStatus("HARNESS_STANDBY // 终端就绪");
     }
-  }
+  };
 
-  function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      if (canSend) {
-        void sendMessage(event);
+  // ── Tasks list for sidebar (derived from first user prompt) ──
+  const taskSummaries: TaskSummary[] = useMemo(() => {
+    if (messages.length === 0) return [];
+    const firstUserMsg = messages.find((m) => m.role === "user");
+    return [
+      {
+        id: "current-task",
+        title: firstUserMsg ? firstUserMsg.content.slice(0, 24) : "当前任务",
+      },
+    ];
+  }, [messages]);
+
+  // ── Keyboard shortcuts (Ctrl+N, Ctrl+K) ──────────────────────
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "n") {
+        e.preventDefault();
+        handleNewTask();
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setIsHelpOpen(true);
       }
-    }
-  }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
-  // ── Clear history ────────────────────────────────────────────
-
-  async function handleClearHistory() {
-    setMessages([]);
-    try {
-      await invoke("clear_history");
-      setStatus("RUNTIME_LOGS_PURGED // 缓存已清空");
-    } catch (error) {
-      console.error(error);
-    }
-  }
-
-  // ── Guard: don't render until settings are loaded ────────────
-
-  if (!settings) {
-    return (
-      <div className="app-shell">
-        <div className="film-grain-overlay" aria-hidden="true" />
-        <header className="topbar">
-          <div className="brand-block">
-            <span className="brand-tag">AGENT HARNESS</span>
-            <h1 className="brand-title">ARIA</h1>
-            <span className="brand-sub">// 智役：咏叹终端</span>
-          </div>
-          <div className="topbar-telemetry">
-            <div className="telemetry-item">
-              <span className="status-indicator busy" />
-              <span>INITIALIZING...</span>
-            </div>
-          </div>
-        </header>
-      </div>
-    );
-  }
-
-  // ── Render ───────────────────────────────────────────────────
+  const workspaceName = useMemo(() => {
+    if (!workspacePath) return "Aria";
+    const parts = workspacePath.replace(/\\/g, "/").split("/");
+    return parts[parts.length - 1] || "Aria";
+  }, [workspacePath]);
 
   return (
-    <div className="app-shell">
-      <div className="film-grain-overlay" aria-hidden="true" />
+    <div className="app-container">
+      {/* 1:1 Top Bar */}
+      <TopBar
+        onNewTerminal={handleNewTask}
+        onOpenHelp={() => setIsHelpOpen(true)}
+        canGoBack={messages.length > 0}
+        canGoForward={false}
+        onGoBack={handleNewTask}
+      />
 
-      <header className="topbar">
-        <div className="brand-block">
-          <span className="brand-tag">AGENT HARNESS</span>
-          <h1 className="brand-title">ARIA</h1>
-          <span className="brand-sub">// 智役：咏叹终端</span>
-        </div>
+      {/* Main Workspace Body */}
+      <div className="workspace-body">
+        {/* 1:1 Left Sidebar */}
+        <Sidebar
+          userName={settings?.userName || "Tempsyche"}
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
+          onNewTask={handleNewTask}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          tasks={taskSummaries}
+          activeTaskId={messages.length > 0 ? "current-task" : undefined}
+          workspaceName={workspaceName}
+          onOpenWorkspace={handleOpenWorkspace}
+        />
 
-        <div className="topbar-telemetry">
-          <div className="telemetry-item">
-            <span>SYS:</span>
-            <strong>
-              {systemTelemetry
-                ? `${systemTelemetry.os.toUpperCase()}_${systemTelemetry.arch.toUpperCase()} (${systemTelemetry.coreCount}C)`
-                : "WIN_DESKTOP"}
-            </strong>
-          </div>
-          <div className="telemetry-item">
-            <span>DSH:</span>
-            <strong>{harnessConn ? `${harnessConn.status.toUpperCase()}:${harnessConn.port}` : "STANDBY"}</strong>
-          </div>
-          <div className="telemetry-item">
-            <span>SLOTS:</span>
-            <strong>
-              {activeProfiles.length} / {settings.aiProfiles.length}
-            </strong>
-          </div>
-          <div className="telemetry-item">
-            <span className={`status-indicator ${isSending ? "busy" : ""}`} />
-            <span>{status}</span>
-          </div>
-        </div>
-      </header>
-
-      <main className={`workspace ${isSidePanelCollapsed ? "side-panel-collapsed" : ""}`}>
-        <aside className={`side-panel ${activePanel === "chat" ? "" : "open"} ${isSidePanelCollapsed ? "collapsed" : ""}`}>
-          <button
-            className="panel-collapse-button"
-            type="button"
-            aria-label={isSidePanelCollapsed ? "展开装具面板" : "收起装具面板"}
-            aria-expanded={!isSidePanelCollapsed}
-            onClick={() => setIsSidePanelCollapsed((collapsed) => !collapsed)}
-          >
-            {isSidePanelCollapsed ? ">" : "<"}
-          </button>
-
-          {(activePanel === "agents" || activePanel === "chat") && (
-            <AgentPanel
-              profiles={settings.aiProfiles}
-              activeIds={activeIds}
-              onAdd={addProfile}
-              onRemove={removeProfile}
-              onToggle={toggleActive}
-              onUpdate={updateProfile}
+        {/* Center Stage Canvas */}
+        <main className="stage-container">
+          {messages.length === 0 ? (
+            /* Home / Greeting Stage (Exact 1:1 match to screenshot) */
+            <CenterHome
+              draft={draft}
+              setDraft={setDraft}
+              onSend={handleSend}
+              isSending={isSending}
+              profiles={settings?.aiProfiles || []}
+              selectedProfileId={activeProfileId}
+              onSelectProfile={setActiveProfileId}
+              selectedModel={selectedModel}
+              onSelectModel={setSelectedModel}
+              workspaceName={workspaceName}
+              onOpenWorkspace={handleOpenWorkspace}
             />
-          )}
-
-          {activePanel === "settings" && (
-            <SettingsPanel
-              settings={settings}
-              onClear={handleClearHistory}
-              onChangeUserName={(userName) => void persist({ ...settings, userName })}
-              onChangeOrchestrationMode={(orchestrationMode) =>
-                void persist({ ...settings, orchestrationMode: orchestrationMode as OrchestrationMode })
-              }
-            />
-          )}
-
-          {activePanel === "inspector" && (
-            <HarnessInspector
-              harnessConn={harnessConn}
-              onRefreshConn={() => {
-                dshClient.init().then(setHarnessConn).catch(console.error);
-              }}
-            />
-          )}
-        </aside>
-
-        <section className="chat-area" aria-label="执行终端">
-          <div className="mode-strip">
-            <button className={activePanel === "chat" ? "active" : ""} onClick={() => setActivePanel("chat")}>
-              TERMINAL // 执行流
-            </button>
-            <button
-              className={activePanel === "agents" ? "active" : ""}
-              onClick={() => {
-                setActivePanel("agents");
-                setIsSidePanelCollapsed(false);
-              }}
-            >
-              SLOTS // 算子槽位
-            </button>
-            <button
-              className={activePanel === "inspector" ? "active" : ""}
-              onClick={() => {
-                setActivePanel("inspector");
-                setIsSidePanelCollapsed(false);
-              }}
-            >
-              INSPECTOR // 内核遥测
-            </button>
-            <button
-              className={activePanel === "settings" ? "active" : ""}
-              onClick={() => {
-                setActivePanel("settings");
-                setIsSidePanelCollapsed(false);
-              }}
-            >
-              CONFIG // 系统设置
-            </button>
-          </div>
-
-          <div className="orchestration-bar">
-            <div>
-              <p className="eyebrow">DISPATCH PROTOCOL</p>
-              <strong>{settings.orchestrationMode === "dag" ? "DETERMINISTIC DAG // 确定性拓扑" : "PARALLEL CONCURRENT // 并行群测"}</strong>
-            </div>
-            <div className="segmented">
-              <button
-                className={settings.orchestrationMode === "dag" ? "active" : ""}
-                onClick={() => void persist({ ...settings, orchestrationMode: "dag" })}
-              >
-                DAG PIPELINE
-              </button>
-              <button
-                className={settings.orchestrationMode === "parallel" ? "active" : ""}
-                onClick={() => void persist({ ...settings, orchestrationMode: "parallel" })}
-              >
-                PARALLEL
-              </button>
-            </div>
-          </div>
-
-          <div className="agent-row">
-            {settings.aiProfiles.map((profile, index) => (
-              <button
-                key={profile.id}
-                className={`agent-chip ${activeIds.includes(profile.id) ? "selected" : ""}`}
-                onClick={() => toggleActive(profile.id)}
-              >
-                <Avatar value={profile.avatar} fallback={profile.name} />
-                <span>
-                  [SLOT-{String(index + 1).padStart(2, "0")}] {profile.name}
-                </span>
-              </button>
-            ))}
-          </div>
-
-          {settings.orchestrationMode === "dag" && activeProfiles.length > 1 && (
-            <div className="dag-strip" aria-label="当前 DAG 流水线">
-              {orchestrationStages.map((stage, index) => (
-                <div className="dag-node" key={stage.id}>
-                  <span>{stage.title}</span>
-                  <strong>{stage.profile.name}</strong>
-                  {index > 0 && <small>// 依赖上游算子结果</small>}
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className="message-list">
-            {messages.length === 0 ? (
-              <div className="empty-state">
-                <h2>ARIA // AGENT HARNESS READY</h2>
-                <p>
-                  终端装具中枢已就绪。选定算子槽位后在底部终端录入目标指令。
-                  <br />
-                  <strong>DAG PIPELINE 模式</strong>将串行推进探针、拓展与审校算子；
-                  <br />
-                  <strong>PARALLEL 模式</strong>将并发派发至所有激活槽位。
-                </p>
-              </div>
-            ) : (
-              messages.map((message) => (
-                <article
-                  key={message.id}
-                  className={`message ${message.role === "user" ? "from-user" : "from-ai"} ${message.error ? "error" : ""}`}
-                >
-                  <Avatar value={message.avatar} fallback={message.speakerName} />
-                  <div className="bubble">
-                    <div className="speaker">
-                      {message.role === "user" ? `// OPERATOR::${message.speakerName}` : `// HARNESS_NODE::${message.speakerName}`}
+          ) : (
+            /* Active Conversation View */
+            <div className="chat-conversation-view">
+              <div className="chat-message-stream">
+                {messages.map((msg) => (
+                  <div key={msg.id} className={`message-bubble-row ${msg.role}`}>
+                    <div className="bubble-body">
+                      {msg.role === "assistant" && (
+                        <div className="speaker-header">
+                          <span className="node-badge">ZCode // {msg.speakerName}</span>
+                          {msg.pending && <span>思考生成中...</span>}
+                        </div>
+                      )}
+                      <div style={{ whiteSpace: "pre-wrap" }}>{msg.content}</div>
                     </div>
-                    <p>{message.content}</p>
                   </div>
-                </article>
-              ))
-            )}
-          </div>
+                ))}
+                <div ref={messageEndRef} />
+              </div>
 
-          <form className="composer" onSubmit={sendMessage}>
-            <textarea
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={
-                activeProfiles.length
-                  ? "输入目标指令并按 Enter 派发 (Shift+Enter 换行)..."
-                  : "未挂载激活槽位，请先勾选至少一个算子节点"
-              }
-              rows={2}
-            />
-            <button disabled={!canSend}>DISPATCH // 派发</button>
-          </form>
-        </section>
-      </main>
+              {/* Bottom Docked Input Box in Active Chat */}
+              <div className="chat-docked-input">
+                <div className="prompt-card" style={{ width: "720px" }}>
+                  <textarea
+                    className="prompt-textarea"
+                    placeholder="向 ZCode 提问，继续跟进任务..."
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSend();
+                      }
+                    }}
+                    rows={2}
+                  />
+                  <div className="prompt-card-footer">
+                    <div className="footer-left-controls">
+                      <span className="model-tag-pill">ds/{selectedModel}</span>
+                    </div>
+                    <div className="footer-right-controls">
+                      <button
+                        type="button"
+                        className="send-arrow-btn"
+                        disabled={!draft.trim() || isSending}
+                        onClick={handleSend}
+                        title="发送"
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <line x1="12" y1="19" x2="12" y2="5" strokeLinecap="round" />
+                          <polyline points="5 12 12 5 19 12" strokeLinecap="round" strokeLinejoin="round" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </main>
+      </div>
+
+      {/* Settings Modal */}
+      {settings && (
+        <SettingsModal
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+          settings={settings}
+          onSave={handleSaveSettings}
+          onClearHistory={handleClearHistory}
+        />
+      )}
+
+      {/* Help / Shortcuts Modal */}
+      {isHelpOpen && (
+        <div className="modal-backdrop" onClick={() => setIsHelpOpen(false)}>
+          <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <span className="modal-title">快捷键与功能指引</span>
+              <button type="button" className="icon-btn" onClick={() => setIsHelpOpen(false)}>
+                ✕
+              </button>
+            </div>
+            <div className="modal-body">
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid var(--border-subtle)" }}>
+                <span style={{ fontSize: "13px" }}>新建任务</span>
+                <span className="shortcut-badge">Ctrl + N</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid var(--border-subtle)" }}>
+                <span style={{ fontSize: "13px" }}>全局搜索 / 快捷指令</span>
+                <span className="shortcut-badge">Ctrl + K</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid var(--border-subtle)" }}>
+                <span style={{ fontSize: "13px" }}>发送指令</span>
+                <span className="shortcut-badge">Enter</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0" }}>
+                <span style={{ fontSize: "13px" }}>输入框换行</span>
+                <span className="shortcut-badge">Shift + Enter</span>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn-primary" onClick={() => setIsHelpOpen(false)}>
+                知道了
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,7 +1,7 @@
-﻿#!/usr/bin/env node
+#!/usr/bin/env node
 
 /**
- * Aria // Desktop Packaging & Runtime Preparation Utility
+ * Atrium // Desktop Packaging & Runtime Preparation Utility
  *
  * Prepares and validates the desktop distribution environment before running
  * `tauri build`. Ensures Vite assets are compiled, DSH sidecar scripts are staged,
@@ -15,7 +15,7 @@ import { resolve } from "node:path";
 const ROOT_DIR = process.cwd();
 
 console.log("\x1b[36m========================================================\x1b[0m");
-console.log("\x1b[1m[ARIA // 智役：咏叹终端] RUNTIME PREPARATION & BUNDLING\x1b[0m");
+console.log("\x1b[1m[ATRIUM // 智役中庭] RUNTIME PREPARATION & BUNDLING\x1b[0m");
 console.log("\x1b[36m========================================================\x1b[0m\n");
 
 // 1. Check frontend assets

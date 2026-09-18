@@ -1,5 +1,5 @@
-﻿# ==============================================================================
-# ARIA // 智役：咏叹终端 - Cordis Profile Patch Overlay
+# ==============================================================================
+# ATRIUM // 智役中庭 - Cordis Profile Patch Overlay
 # Layer: Desktop Customization on top of dsh-base and dsh-web-app
 # ==============================================================================
 
@@ -14,6 +14,6 @@
     - id: aria-telemetry
       name: '@aria/dsh-plugin'
       config:
-        terminal: "Aria // 智役：咏叹终端"
+        terminal: "Atrium // 智役中庭"
         mode: "desktop"
         harnessSlots: 8

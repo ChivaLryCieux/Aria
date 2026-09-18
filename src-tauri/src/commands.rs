@@ -115,7 +115,7 @@ pub fn get_system_telemetry() -> SystemTelemetry {
     let cores = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
     let host = std::env::var("COMPUTERNAME")
         .or_else(|_| std::env::var("HOSTNAME"))
-        .unwrap_or_else(|_| "ARIA-TERMINAL".to_string());
+        .unwrap_or_else(|_| "ATRIUM-TERMINAL".to_string());
 
     SystemTelemetry {
         os: std::env::consts::OS.to_string(),

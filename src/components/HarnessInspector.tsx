@@ -1,4 +1,4 @@
-﻿import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 import { HarnessConnectionInfo } from "../services/dshClient";
 
@@ -10,7 +10,7 @@ interface HarnessInspectorProps {
 export function HarnessInspector({ harnessConn, onRefreshConn }: HarnessInspectorProps) {
   const [workspacePath, setWorkspacePath] = useState<string>("");
   const [telemetryLogs] = useState<Array<{ id: string; time: string; text: string }>>([
-    { id: "1", time: "INIT", text: "Aria Harness Inspector ready." },
+    { id: "1", time: "INIT", text: "Atrium Harness Inspector ready." },
     { id: "2", time: "CORE", text: "DSH Core Daemon connection monitored on port 19387." },
     { id: "3", time: "CORDIS", text: "Cordis microkernel service graph healthy." },
   ]);
@@ -66,7 +66,7 @@ export function HarnessInspector({ harnessConn, onRefreshConn }: HarnessInspecto
 
         <div className="field">
           <span>工作区路径 (WORKSPACE_PATH)</span>
-          <input type="text" readOnly value={workspacePath || "C:\\Users\\...\\Aria"} />
+          <input type="text" readOnly value={workspacePath || "C:\\Users\\...\\Atrium"} />
         </div>
 
         <button className="secondary full" onClick={handleOpenWorkspace}>

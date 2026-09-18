@@ -39,13 +39,13 @@ fn default_settings() -> AppSettings {
 
 fn default_profile() -> AiProfile {
     AiProfile {
-        id: "aria-prime".to_string(),
-        name: "Aria Prime".to_string(),
-        avatar: "ARIA".to_string(),
+        id: "atrium-prime".to_string(),
+        name: "Atrium Prime".to_string(),
+        avatar: "ATRIUM".to_string(),
         endpoint: "https://api.openai.com/v1/chat/completions".to_string(),
         api_key: String::new(),
         model: "gpt-4o-mini".to_string(),
-        system_prompt: "你是 Aria 智役终端的主控智能体（Aria Prime）。作为装具中枢，你冷静、精确、恪守事实，提供高信息密度、逻辑严谨的工程与技术分析。".to_string(),
+        system_prompt: "你是 Atrium 智役中庭的主控智能体（Atrium Prime）。作为装具中枢，你冷静、精确、恪守事实，提供高信息密度、逻辑严谨的工程与技术分析。".to_string(),
         temperature: 0.5,
     }
 }
@@ -245,7 +245,7 @@ pub fn create_profile() -> AiProfile {
         endpoint: "https://api.openai.com/v1/chat/completions".to_string(),
         api_key: String::new(),
         model: "gpt-4o-mini".to_string(),
-        system_prompt: "你是搭载于 Aria 智役终端的高效工程智能体，专注于结构化分析与解决问题。".to_string(),
+        system_prompt: "你是搭载于 Atrium 智役中庭的高效工程智能体，专注于结构化分析与解决问题。".to_string(),
         temperature: 0.5,
     }
 }

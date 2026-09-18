@@ -329,9 +329,9 @@ export function App() {
   }, []);
 
   const workspaceName = useMemo(() => {
-    if (!workspacePath) return "Aria";
+    if (!workspacePath) return "Atrium";
     const parts = workspacePath.replace(/\\/g, "/").split("/");
-    return parts[parts.length - 1] || "Aria";
+    return parts[parts.length - 1] || "Atrium";
   }, [workspacePath]);
 
   return (

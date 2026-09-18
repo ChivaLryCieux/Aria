@@ -1,4 +1,4 @@
-﻿import type { AriaTelemetryService } from './telemetry.ts';
+import type { AriaTelemetryService } from './telemetry.ts';
 
 export interface AriaToolDefinition {
   name: string;
@@ -18,7 +18,7 @@ export function createAriaDesktopTools(telemetry: AriaTelemetryService): AriaToo
       },
       execute: async () => {
         return {
-          terminal: 'Aria // 智役：咏叹终端',
+          terminal: 'Atrium // 智役中庭',
           arch: process.arch,
           platform: process.platform,
           uptimeSecs: Math.floor(process.uptime()),

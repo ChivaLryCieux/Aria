@@ -1,7 +1,7 @@
-﻿#!/usr/bin/env node
+#!/usr/bin/env node
 
 /**
- * Aria // Upstream DSH (DeepSeek Harness) Synchronization & Inspection Utility
+ * Atrium // Upstream DSH (DeepSeek Harness) Synchronization & Inspection Utility
  *
  * Verifies the integrity of the upstream deepseek-harness repository,
  * checks for newly available releases/tags, verifies zero-pollution compliance,
@@ -17,7 +17,7 @@ const DSH_DIR = resolve(ROOT_DIR, "deepseek-harness");
 const ARIA_PROFILE_DIR = resolve(ROOT_DIR, "packages/aria-core/profiles/aria-desktop");
 
 console.log("\x1b[36m========================================================\x1b[0m");
-console.log("\x1b[1m[ARIA // 智役：咏叹终端] UPSTREAM ENGINE SYNC PROTOCOL\x1b[0m");
+console.log("\x1b[1m[ATRIUM // 智役中庭] UPSTREAM ENGINE SYNC PROTOCOL\x1b[0m");
 console.log("\x1b[36m========================================================\x1b[0m\n");
 
 // 1. Verify dsh directory
@@ -82,5 +82,5 @@ if (shouldFetch) {
 }
 
 console.log("\n\x1b[36m--------------------------------------------------------\x1b[0m");
-console.log("\x1b[1m[STATUS] Aria Engine Synchronizer inspection completed.\x1b[0m");
+console.log("\x1b[1m[STATUS] Atrium Engine Synchronizer inspection completed.\x1b[0m");
 console.log("\x1b[36m--------------------------------------------------------\x1b[0m\n");

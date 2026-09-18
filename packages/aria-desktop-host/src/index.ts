@@ -40,7 +40,7 @@ const server = http.createServer((req, res) => {
   if (req.url === '/api/harness/info') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
-      harness: 'Aria // 智役：咏叹终端',
+      harness: 'Atrium // 智役中庭',
       kernel: 'DeepSeek Harness (Cordis Engine)',
       protocol: 'v1.alpha',
       authenticated: true,

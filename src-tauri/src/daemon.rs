@@ -21,7 +21,7 @@ impl Default for HarnessConnection {
             status: "standby".to_string(),
             url: "http://127.0.0.1:19387".to_string(),
             port: 19387,
-            token: Some("aria-session-token".to_string()),
+            token: Some("atrium-session-token".to_string()),
             pid: None,
             message: Some("Harness daemon not started yet".to_string()),
         }
@@ -58,7 +58,7 @@ impl DshDaemon {
                     status: "ready".to_string(),
                     url: format!("http://{addr}"),
                     port,
-                    token: Some("aria-session-token".to_string()),
+                    token: Some("atrium-session-token".to_string()),
                     pid: Some(std::process::id()),
                     message: Some(format!("Port {port} active, connected: {e}")),
                 };
@@ -74,13 +74,13 @@ impl DshDaemon {
         tokio::spawn(async move {
             loop {
                 tokio::select! {
+                    _ = shutdown_rx.notified() => {
+                        break;
+                    }
                     accept_res = listener.accept() => {
                         if let Ok((socket, _)) = accept_res {
                             tokio::spawn(handle_http_client(socket));
                         }
-                    }
-                    _ = shutdown_rx.notified() => {
-                        break;
                     }
                 }
             }
@@ -90,9 +90,9 @@ impl DshDaemon {
             status: "ready".to_string(),
             url: format!("http://{addr}"),
             port,
-            token: Some("aria-session-token".to_string()),
+            token: Some("atrium-session-token".to_string()),
             pid: Some(std::process::id()),
-            message: Some("Aria Native Daemon active in Tokio runtime".to_string()),
+            message: Some("Atrium Native Daemon active in Tokio runtime".to_string()),
         };
 
         self.connection = conn.clone();
@@ -123,7 +123,7 @@ async fn handle_http_client(mut socket: TcpStream) {
 
     let (status_line, body) = if request.starts_with("GET /healthz") || request.starts_with("GET /status") {
         let json = serde_json::json!({
-            "service": "Aria DSH Desktop Host (Rust Native)",
+            "service": "Atrium DSH Desktop Host (Rust Native)",
             "version": "0.2.0",
             "status": "ready",
             "port": 19387,
@@ -134,11 +134,11 @@ async fn handle_http_client(mut socket: TcpStream) {
         ("HTTP/1.1 200 OK", json.to_string())
     } else if request.starts_with("GET /api/harness/info") {
         let json = serde_json::json!({
-            "harness": "Aria // 智役：咏叹终端",
+            "harness": "Atrium // 智役中庭",
             "kernel": "DeepSeek Harness (Rust Native Engine)",
             "protocol": "v1.alpha",
             "authenticated": true,
-            "token": "aria-session-token",
+            "token": "atrium-session-token",
             "url": "http://127.0.0.1:19387",
             "wsUrl": "ws://127.0.0.1:19387/events"
         });

@@ -1,12 +1,12 @@
-# Aria // 智役：咏叹终端
+# Atrium // 智役中庭
 
-> **Aria (AI Agent Harness Terminal)** 是一个基于 DeepSeek Harness (`dsh`) 内核、Cordis 微内核架构、Rust Tauri 2 与 React 18 构建的工程级智能体装具与编排终端。优先面向 **Desktop / Windows 桌面端**，为复杂研发、推理与多模型协同任务提供严谨、可预测、高信息密度的 AI 编排能力。
+> **Atrium (AI Agent Harness Terminal)** 是一个基于 DeepSeek Harness (`dsh`) 内核、Cordis 微内核架构、Rust Tauri 2 与 React 18 构建的工程级智能体装具与编排终端。优先面向 **Desktop / Windows 桌面端**，为复杂研发、推理与多模型协同任务提供严谨、可预测、高信息密度的 AI 编排能力。
 
 ---
 
 ## 核心定位
 
-Aria 定位于与 **Codex、ZCode、Antigravity** 同类型的 **AI Agent Harness（智能体装具）** 应用：
+Atrium 定位于与 **Codex、ZCode、Antigravity** 同类型的 **AI Agent Harness（智能体装具）** 应用：
 - **装具化调度 (Harness & Dispatch)**：基于 `deepseek-harness` 驱动，每个智能体作为一个标准化算子槽位（Slot），支持专属凭据、模型参数与工程约束。
 - **确定性 DAG 流水线 (Deterministic DAG Pipeline)**：将多节点协同流水线（探针 Probe -> 拓展 Synthesis -> 审校 Critique）深度接入内核级调度。
 - **全向并行群测 (Parallel Concurrency)**：支持多智能体同态输入并列响应，用于基准对比与多样性探索。
@@ -16,7 +16,7 @@ Aria 定位于与 **Codex、ZCode、Antigravity** 同类型的 **AI Agent Harnes
 
 ## 视觉与工程美学：砼核粗野主义 (Concrete Core Brutalism)
 
-Aria 采用冷静、克制、硬核的**粗野主义（Brutalism）**与**砼核（Béton Brut）**美学：
+Atrium 采用冷静、克制、硬核的**粗野主义（Brutalism）**与**砼核（Béton Brut）**美学：
 - **胶片颗粒与水泥噪点覆层 (Film Grain & Noise Texture)**：SVG `feTurbulence` 分形噪点遮罩，模拟工业冷钢与现浇水泥表面质感。
 - **纯直角机械装具排版 (0px Radius / Precision Geometry)**：坚固冷硬的结构分割线、等宽字体（Monospace）遥测标线与工业状态指示灯。
 - **桌面级工作台布局 (Desktop-First Ergonomics)**：为 Windows 桌面设计的多窗格装具插槽、中央执行遥测流与内核装具检查器（Harness Inspector）。
@@ -26,7 +26,7 @@ Aria 采用冷静、克制、硬核的**粗野主义（Brutalism）**与**砼核
 ## 架构概览
 
 ```text
-Aria 桌面工作台 (Desktop Host)
+Atrium 桌面工作台 (Desktop Host)
 ├── 表现层 (React 18 + TypeScript + Vite)
 │   ├── 胶片颗粒滤镜层 (Film Grain Overlay)
 │   ├── 算子槽位管理器 (Agent Harness Slots)

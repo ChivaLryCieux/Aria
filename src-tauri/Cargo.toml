@@ -1,17 +1,17 @@
 [package]
-name = "aria"
+name = "atrium"
 version = "0.2.0"
-description = "Aria AI Agent Harness Terminal"
-authors = ["Aria"]
+description = "Atrium AI Agent Harness Terminal"
+authors = ["Atrium"]
 edition = "2021"
 rust-version = "1.77"
 
 [lib]
-name = "aria_lib"
+name = "atrium_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [[bin]]
-name = "aria"
+name = "atrium"
 path = "src/main.rs"
 
 [build-dependencies]

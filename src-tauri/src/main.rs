@@ -1,3 +1,3 @@
 fn main() {
-    aria_lib::run();
+    atrium_lib::run();
 }

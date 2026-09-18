@@ -52,6 +52,6 @@ pub fn run() {
             commands::delete_session,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running Aria");
+        .expect("error while running Atrium");
 }
 

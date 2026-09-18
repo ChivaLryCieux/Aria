@@ -1,7 +1,7 @@
 {
-  "name": "aria",
+  "name": "atrium",
   "version": "0.2.0",
-  "description": "Aria - 智役：咏叹终端 (AI Agent Harness Terminal)",
+  "description": "Atrium - 智役中庭 (AI Agent Harness Terminal)",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@11.7.0",

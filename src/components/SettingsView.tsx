@@ -77,7 +77,7 @@ export function SettingsView({
       <aside className="settings-sidebar">
         {/* Top: App Logo & Back Button */}
         <div className="settings-sidebar-header">
-          <div className="app-logo-badge" title="ZCode / Aria">
+          <div className="app-logo-badge" title="ZCode / Atrium">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
               <path d="M4 5h16v3.2l-10.2 10.8H20v3H4v-3.2L14.2 8H4V5z" />
             </svg>
@@ -410,7 +410,7 @@ export function SettingsView({
                   {/* Build / Auth Banner */}
                   <div className="provider-banner">
                     <div className="banner-left">
-                      <strong>ZCode / Aria Engine Link</strong>
+                      <strong>ZCode / Atrium Engine Link</strong>
                       <div className="banner-sub">
                         <span className="text-success">待生效 23:00</span>
                         <span> · 验证周期 2026-09-20</span>

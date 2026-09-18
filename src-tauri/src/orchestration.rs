@@ -80,7 +80,7 @@ pub fn build_stages(profiles: &[AiProfile]) -> Vec<OrchestrationStage> {
 pub fn with_stage_instruction(profile: &AiProfile, stage: &OrchestrationStage) -> AiProfile {
     let base_prompt = profile.system_prompt.trim();
     let orchestration_prompt = format!(
-        "[ARIA_HARNESS_DISPATCH]\n\
+        "[ATRIUM_HARNESS_DISPATCH]\n\
          - 当前流水线节点: {}\n\
          - 算子角色: {}\n\
          - 调度执行指令: {}\n\

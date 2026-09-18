@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import AgentPanel from "./components/AgentPanel";
 import { Avatar } from "./components/Avatar";
 import { SettingsPanel } from "./components/SettingsPanel";
+import { HarnessInspector } from "./components/HarnessInspector";
 import { createUserMessage } from "./constants/defaults";
 import { AiProfile, AppSettings, ChatMessage, OrchestrationMode, OrchestrationStage } from "./types/chat";
 import { createPendingMessages } from "./utils/messages";
@@ -14,7 +15,7 @@ export function App() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [activeIds, setActiveIds] = useState<string[]>([]);
-  const [activePanel, setActivePanel] = useState<"chat" | "agents" | "settings">("chat");
+  const [activePanel, setActivePanel] = useState<"chat" | "agents" | "settings" | "inspector">("chat");
   const [isSidePanelCollapsed, setIsSidePanelCollapsed] = useState(false);
   const [draft, setDraft] = useState("");
   const [status, setStatus] = useState("HARNESS_STANDBY // 终端就绪");
@@ -335,6 +336,15 @@ export function App() {
               }
             />
           )}
+
+          {activePanel === "inspector" && (
+            <HarnessInspector
+              harnessConn={harnessConn}
+              onRefreshConn={() => {
+                dshClient.init().then(setHarnessConn).catch(console.error);
+              }}
+            />
+          )}
         </aside>
 
         <section className="chat-area" aria-label="执行终端">
@@ -342,10 +352,31 @@ export function App() {
             <button className={activePanel === "chat" ? "active" : ""} onClick={() => setActivePanel("chat")}>
               TERMINAL // 执行流
             </button>
-            <button className={activePanel === "agents" ? "active" : ""} onClick={() => setActivePanel("agents")}>
+            <button
+              className={activePanel === "agents" ? "active" : ""}
+              onClick={() => {
+                setActivePanel("agents");
+                setIsSidePanelCollapsed(false);
+              }}
+            >
               SLOTS // 算子槽位
             </button>
-            <button className={activePanel === "settings" ? "active" : ""} onClick={() => setActivePanel("settings")}>
+            <button
+              className={activePanel === "inspector" ? "active" : ""}
+              onClick={() => {
+                setActivePanel("inspector");
+                setIsSidePanelCollapsed(false);
+              }}
+            >
+              INSPECTOR // 内核遥测
+            </button>
+            <button
+              className={activePanel === "settings" ? "active" : ""}
+              onClick={() => {
+                setActivePanel("settings");
+                setIsSidePanelCollapsed(false);
+              }}
+            >
               CONFIG // 系统设置
             </button>
           </div>

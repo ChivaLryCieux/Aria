@@ -1,0 +1,19 @@
+﻿# ==============================================================================
+# ARIA // 智役：咏叹终端 - Cordis Profile Patch Overlay
+# Layer: Desktop Customization on top of dsh-base and dsh-web-app
+# ==============================================================================
+
+- update:
+    id: webServer
+    config:
+      port: 19387
+      host: 127.0.0.1
+      open: false
+
+- insert:
+    - id: aria-telemetry
+      name: '@aria/dsh-plugin'
+      config:
+        terminal: "Aria // 智役：咏叹终端"
+        mode: "desktop"
+        harnessSlots: 8

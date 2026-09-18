@@ -1,8 +1,12 @@
-﻿{
+{
   "name": "@aria/core",
   "version": "0.2.0",
   "description": "Aria Core - Profile manifests and configuration overlays for DeepSeek Harness",
   "type": "module",
-  "main": "index.js",
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./*"
+  },
   "license": "MIT"
 }

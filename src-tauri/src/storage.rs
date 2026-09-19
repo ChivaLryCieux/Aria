@@ -242,10 +242,20 @@ pub fn create_profile() -> AiProfile {
         id: Uuid::new_v4().to_string(),
         name: "Agent Node".to_string(),
         avatar: "NODE".to_string(),
-        endpoint: "https://api.openai.com/v1/chat/completions".to_string(),
+        endpoint: "https://api.deepseek.com/v1/chat/completions".to_string(),
         api_key: String::new(),
-        model: "gpt-4o-mini".to_string(),
+        model: "deepseek-flash".to_string(),
         system_prompt: "你是搭载于 Atrium 智役中庭的高效工程智能体，专注于结构化分析与解决问题。".to_string(),
         temperature: 0.5,
     }
+}
+
+pub fn delete_profile(app: &AppHandle, profile_id: &str) -> Result<AppSettings, String> {
+    let mut settings = load_settings(app)?;
+    settings.ai_profiles.retain(|p| p.id != profile_id);
+    if settings.ai_profiles.is_empty() {
+        settings.ai_profiles = vec![default_profile()];
+    }
+    save_settings(app, &settings)?;
+    Ok(settings)
 }

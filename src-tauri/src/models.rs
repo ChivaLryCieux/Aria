@@ -75,6 +75,9 @@ pub struct OrchestrationRequest {
     pub profiles: Vec<AiProfile>,
     pub messages: Vec<ChatMessage>,
     pub mode: String,
+    /// Atrium conversation identity; binds kernel sessions across turns.
+    #[serde(default)]
+    pub conversation_id: Option<String>,
 }
 
 /// Event emitted to the frontend during orchestration execution.

@@ -1,8 +1,11 @@
 use reqwest::Client;
+use serde::Serialize;
 use tauri::{AppHandle, Emitter};
+use tokio::sync::Mutex;
 use uuid::Uuid;
 
 use crate::ai_client::send_openai_compatible;
+use crate::daemon::DshDaemon;
 use crate::messages::to_api_messages;
 use crate::models::{
     AiProfile, ChatMessage, OrchestrationProgress, OrchestrationStage,
@@ -102,27 +105,285 @@ pub fn with_stage_instruction(profile: &AiProfile, stage: &OrchestrationStage) -
 
 /// Execute the full orchestration pipeline and return the final message list.
 ///
-/// For DAG mode, stages execute sequentially; each stage's output is appended
-/// to the context for the next stage.  Progress events are emitted to the
-/// frontend via Tauri's event system.
+/// Preferred route: the Atrium kernel bridge (`@aria/desktop-host`) driving a
+/// real DeepSeek Harness runtime — one kernel session per conversation, so
+/// multi-turn context is owned by the kernel and replies stream to the UI
+/// over its WebSocket.
 ///
-/// For parallel mode, all profiles are queried concurrently with the same
-/// base context.
+/// Fallback route: direct OpenAI-compatible HTTP calls, used when the kernel
+/// bridge is unavailable (no Node, kernel not built, port probe failed).
 pub async fn execute(
     app: &AppHandle,
     http: &Client,
+    kernel_http: &Client,
+    daemon: &Mutex<DshDaemon>,
     profiles: &[AiProfile],
     base_messages: &[ChatMessage],
     mode: &str,
+    conversation_id: Option<String>,
 ) -> Vec<ChatMessage> {
-    if mode == "parallel" {
-        execute_parallel(app, http, profiles, base_messages).await
+    let kernel_ready = {
+        let mut guard = daemon.lock().await;
+        if !guard.kernel_available() {
+            // One late start attempt: the frontend may not have finished
+            // initializing the bridge when the first message arrives.
+            let _ = guard.start(http, app).await;
+        }
+        guard.kernel_available()
+    };
+
+    if kernel_ready {
+        let conversation = conversation_id.unwrap_or_else(|| format!("adhoc-{}", Uuid::new_v4()));
+        if mode == "parallel" {
+            execute_parallel_kernel(kernel_http, profiles, base_messages, &conversation).await
+        } else {
+            execute_dag_kernel(app, kernel_http, profiles, base_messages, &conversation).await
+        }
+    } else if mode == "parallel" {
+        execute_parallel(http, profiles, base_messages).await
     } else {
         execute_dag(app, http, profiles, base_messages).await
     }
 }
 
-// ─── DAG execution ─────────────────────────────────────────────
+// ─── Kernel route (DeepSeek Harness runtime) ───────────────────
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct KernelTurnRequest {
+    conversation_id: String,
+    stage_id: Option<String>,
+    provider: String,
+    model: String,
+    api_key: String,
+    prompt: String,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct KernelTurnResponse {
+    #[serde(default)]
+    #[allow(dead_code)]
+    session_id: String,
+    #[serde(default)]
+    final_response: String,
+}
+
+async fn post_turn(
+    http: &Client,
+    daemon_url: &str,
+    request: &KernelTurnRequest,
+    timeout: std::time::Duration,
+) -> Result<KernelTurnResponse, String> {
+    let url = format!("{daemon_url}/v1/turn");
+    let future = http.post(&url).json(request).send();
+    let response = tokio::time::timeout(timeout, future)
+        .await
+        .map_err(|_| "节点执行超时（内核熔断保护）".to_string())?
+        .map_err(|e| format!("内核桥接请求失败: {e}"))?;
+
+    let status = response.status();
+    let body = response.text().await.unwrap_or_default();
+    if !status.is_success() {
+        let detail = serde_json::from_str::<serde_json::Value>(&body)
+            .ok()
+            .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(str::to_string))
+            .unwrap_or_else(|| {
+                let mut preview = body.chars().take(300).collect::<String>();
+                if preview.len() < body.len() {
+                    preview.push('…');
+                }
+                preview
+            });
+        return Err(format!("内核返回 {status}: {detail}"));
+    }
+
+    serde_json::from_str(&body).map_err(|e| format!("内核响应解析失败: {e}"))
+}
+
+fn latest_user_input(messages: &[ChatMessage]) -> String {
+    messages
+        .iter()
+        .rev()
+        .find(|m| m.role == "user")
+        .map(|m| m.content.clone())
+        .unwrap_or_default()
+}
+
+fn kernel_stage_prompt(stage: &OrchestrationStage, index: usize, user_input: &str) -> String {
+    let persona = stage.profile.system_prompt.trim();
+    let mut prompt = String::new();
+    if index == 0 {
+        if !persona.is_empty() {
+            prompt.push_str(&format!("[算子准则]\n{persona}\n\n"));
+        }
+        prompt.push_str(&format!(
+            "[节点指令] {}\n\n[操作员输入]\n{}",
+            stage.instruction, user_input
+        ));
+    } else {
+        prompt.push_str(&format!(
+            "[节点指令] {}\n\n（前序节点输出已在本会话上下文中，请基于其继续推进。）",
+            stage.instruction
+        ));
+    }
+    prompt
+}
+
+fn stage_message_id(stage: &OrchestrationStage) -> String {
+    // Stable id shared with the frontend pending bubble, so streamed deltas
+    // and the settled reply render into the same node.
+    stage.id.clone()
+}
+
+async fn execute_dag_kernel(
+    app: &AppHandle,
+    http: &Client,
+    profiles: &[AiProfile],
+    base_messages: &[ChatMessage],
+    conversation: &str,
+) -> Vec<ChatMessage> {
+    let stages = build_stages(profiles);
+    let daemon_url = "http://127.0.0.1:19387";
+    let user_input = latest_user_input(base_messages);
+    let mut completed_replies: Vec<ChatMessage> = Vec::new();
+
+    for (index, stage) in stages.iter().enumerate() {
+        let _ = app.emit(
+            "orchestration-progress",
+            OrchestrationProgress {
+                stage_id: stage.id.clone(),
+                stage_title: stage.title.clone(),
+                profile_name: stage.profile.name.clone(),
+                status: "running".to_string(),
+                content: Some(format!("{} 正在处理...", stage.title)),
+                message_id: Some(stage_message_id(stage)),
+            },
+        );
+
+        let request = KernelTurnRequest {
+            conversation_id: conversation.to_string(),
+            stage_id: Some(stage.id.clone()),
+            provider: "deepseek-official".to_string(),
+            model: stage.profile.model.clone(),
+            api_key: stage.profile.api_key.clone(),
+            prompt: kernel_stage_prompt(stage, index, &user_input),
+        };
+
+        match post_turn(http, daemon_url, &request, std::time::Duration::from_secs(600)).await {
+            Ok(turn) => {
+                let reply = ChatMessage {
+                    id: stage_message_id(stage),
+                    role: "assistant".to_string(),
+                    content: turn.final_response,
+                    speaker_id: Some(stage.profile.id.clone()),
+                    speaker_name: format!("{} · {}", stage.title, stage.profile.name),
+                    avatar: stage.profile.avatar.clone(),
+                    pending: false,
+                    error: false,
+                };
+                let _ = app.emit(
+                    "orchestration-progress",
+                    OrchestrationProgress {
+                        stage_id: stage.id.clone(),
+                        stage_title: stage.title.clone(),
+                        profile_name: stage.profile.name.clone(),
+                        status: "completed".to_string(),
+                        content: Some(reply.content.clone()),
+                        message_id: Some(reply.id.clone()),
+                    },
+                );
+                completed_replies.push(reply);
+            }
+            Err(err) => {
+                let reply = ChatMessage {
+                    id: stage_message_id(stage),
+                    role: "assistant".to_string(),
+                    content: err.clone(),
+                    speaker_id: Some(stage.profile.id.clone()),
+                    speaker_name: format!("{} · {}", stage.title, stage.profile.name),
+                    avatar: stage.profile.avatar.clone(),
+                    pending: false,
+                    error: true,
+                };
+                let _ = app.emit(
+                    "orchestration-progress",
+                    OrchestrationProgress {
+                        stage_id: stage.id.clone(),
+                        stage_title: stage.title.clone(),
+                        profile_name: stage.profile.name.clone(),
+                        status: "error".to_string(),
+                        content: Some(err),
+                        message_id: Some(reply.id.clone()),
+                    },
+                );
+                completed_replies.push(reply);
+                // A kernel failure (credential, route, transport) will repeat
+                // identically on every later stage — stop the pipeline here.
+                break;
+            }
+        }
+    }
+
+    completed_replies
+}
+
+async fn execute_parallel_kernel(
+    http: &Client,
+    profiles: &[AiProfile],
+    base_messages: &[ChatMessage],
+    conversation: &str,
+) -> Vec<ChatMessage> {
+    let daemon_url = "http://127.0.0.1:19387";
+    let user_input = latest_user_input(base_messages);
+
+    let futures = profiles.iter().enumerate().map(|(index, profile)| {
+        let conversation = format!("{conversation}::parallel-{index}");
+        let prompt = if profile.system_prompt.trim().is_empty() {
+            user_input.clone()
+        } else {
+            format!("[算子准则]\n{}\n\n[操作员输入]\n{}", profile.system_prompt.trim(), user_input)
+        };
+        let request = KernelTurnRequest {
+            conversation_id: conversation,
+            stage_id: Some(format!("{}-{}", profile.id, index)),
+            provider: "deepseek-official".to_string(),
+            model: profile.model.clone(),
+            api_key: profile.api_key.clone(),
+            prompt,
+        };
+        async move {
+            match post_turn(http, daemon_url, &request, std::time::Duration::from_secs(600)).await {
+                Ok(turn) => (profile, Ok(turn.final_response)),
+                Err(err) => (profile, Err(err)),
+            }
+        }
+    });
+
+    let results = futures::future::join_all(futures).await;
+
+    results
+        .into_iter()
+        .map(|(profile, result)| {
+            let (content, error) = match result {
+                Ok(text) => (text, false),
+                Err(err) => (err, true),
+            };
+            ChatMessage {
+                id: Uuid::new_v4().to_string(),
+                role: "assistant".to_string(),
+                content,
+                speaker_id: Some(profile.id.clone()),
+                speaker_name: profile.name.clone(),
+                avatar: profile.avatar.clone(),
+                pending: false,
+                error,
+            }
+        })
+        .collect()
+}
+
+// ─── Direct route (fallback, no kernel) ────────────────────────
 
 async fn execute_dag(
     app: &AppHandle,
@@ -230,10 +491,7 @@ async fn execute_dag(
     completed_replies
 }
 
-// ─── Parallel execution ────────────────────────────────────────
-
 async fn execute_parallel(
-    _app: &AppHandle,
     http: &Client,
     profiles: &[AiProfile],
     base_messages: &[ChatMessage],

@@ -42,6 +42,11 @@ pub fn create_profile() -> AiProfile {
     storage::create_profile()
 }
 
+#[tauri::command]
+pub fn delete_profile(app: AppHandle, profile_id: String) -> Result<AppSettings, String> {
+    storage::delete_profile(&app, &profile_id)
+}
+
 // ─── Single chat call (kept for direct use) ────────────────────
 
 #[tauri::command]
@@ -62,8 +67,17 @@ pub async fn execute_orchestration(
     state: State<'_, crate::AppState>,
     request: OrchestrationRequest,
 ) -> Result<Vec<ChatMessage>, String> {
-    let replies =
-        orchestration::execute(&app, &state.http, &request.profiles, &request.messages, &request.mode).await;
+    let replies = orchestration::execute(
+        &app,
+        &state.http,
+        &state.kernel_http,
+        &state.daemon,
+        &request.profiles,
+        &request.messages,
+        &request.mode,
+        request.conversation_id,
+    )
+    .await;
     Ok(replies)
 }
 
@@ -76,10 +90,11 @@ pub fn build_orchestration(profiles: Vec<AiProfile>) -> Vec<crate::models::Orche
 
 #[tauri::command]
 pub async fn start_harness_daemon(
+    app: AppHandle,
     state: State<'_, crate::AppState>,
 ) -> Result<crate::daemon::HarnessConnection, String> {
     let mut daemon = state.daemon.lock().await;
-    daemon.start().await
+    daemon.start(&state.http, &app).await
 }
 
 #[tauri::command]

@@ -7,6 +7,7 @@ import { CenterHome } from "./components/CenterHome";
 import { SettingsView } from "./components/SettingsView";
 import { ProjectDialog } from "./components/ProjectDialog";
 import { SoulManagerDialog } from "./components/SoulManagerDialog";
+import { AboutDialog } from "./components/AboutDialog";
 import { PromptCard } from "./components/PromptCard";
 import { createUserMessage } from "./constants/defaults";
 import {
@@ -43,7 +44,7 @@ export function App() {
   const [isSending, setIsSending] = useState<boolean>(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [currentView, setCurrentView] = useState<"workspace" | "settings">("workspace");
-  const [isHelpOpen, setIsHelpOpen] = useState<boolean>(false);
+  const [isAboutOpen, setIsAboutOpen] = useState<boolean>(false);
   const [workspacePath, setWorkspacePath] = useState<string>("");
   const [orchestrationStages, setOrchestrationStages] = useState<OrchestrationStage[]>([]);
 
@@ -488,7 +489,7 @@ export function App() {
         handleNewTask();
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        setIsHelpOpen(true);
+        setIsAboutOpen(true);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
@@ -512,7 +513,7 @@ export function App() {
           setCurrentView("workspace");
           handleNewTask();
         }}
-        onOpenHelp={() => setIsHelpOpen(true)}
+        onOpenAbout={() => setIsAboutOpen(true)}
       />
 
       {currentView === "settings" && settings ? (
@@ -642,42 +643,8 @@ export function App() {
         />
       )}
 
-      {/* Help / Shortcuts Modal */}
-      {isHelpOpen && (
-        <div className="modal-backdrop" onClick={() => setIsHelpOpen(false)}>
-          <div className="modal-dialog" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <span className="modal-title">快捷键与功能指引</span>
-              <button type="button" className="icon-btn" onClick={() => setIsHelpOpen(false)}>
-                ✕
-              </button>
-            </div>
-            <div className="modal-body">
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid var(--border-subtle)" }}>
-                <span style={{ fontSize: "13px" }}>新建任务</span>
-                <span className="shortcut-badge">Ctrl + N</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid var(--border-subtle)" }}>
-                <span style={{ fontSize: "13px" }}>全局搜索 / 快捷指令</span>
-                <span className="shortcut-badge">Ctrl + K</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0", borderBottom: "1px solid var(--border-subtle)" }}>
-                <span style={{ fontSize: "13px" }}>发送指令</span>
-                <span className="shortcut-badge">Enter</span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 0" }}>
-                <span style={{ fontSize: "13px" }}>输入框换行</span>
-                <span className="shortcut-badge">Shift + Enter</span>
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button type="button" className="btn-primary" onClick={() => setIsHelpOpen(false)}>
-                知道了
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* About / Charter Modal (question-mark button, Ctrl+K) */}
+      {isAboutOpen && <AboutDialog onClose={() => setIsAboutOpen(false)} />}
     </div>
   );
 }

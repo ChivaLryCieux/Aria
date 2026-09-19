@@ -853,6 +853,61 @@ button, input, textarea, select, [role="button"], a {
   background: #fafafa;
 }
 
+/* About / Charter dialog (question-mark button) */
+.about-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.about-tab {
+  flex: 1;
+  padding: 11px 0 9px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 2px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.about-tab:hover {
+  color: var(--text-secondary);
+}
+
+.about-tab.active {
+  color: var(--accent-black);
+  border-bottom-color: var(--accent-black);
+  font-weight: 600;
+}
+
+.about-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  background: #fafafa;
+  border: 1px solid var(--border-subtle);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.about-placeholder {
+  border: 1px dashed var(--border-default);
+  padding: 14px 16px;
+  font-size: 13px;
+  line-height: 1.8;
+  color: var(--text-muted);
+  white-space: pre-wrap;
+}
+
+.about-placeholder.charter {
+  line-height: 1.9;
+}
+
 .btn-secondary {
   padding: 6px 14px;
   background: var(--bg-card);

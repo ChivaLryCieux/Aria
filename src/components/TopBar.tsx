@@ -4,14 +4,14 @@ type TopBarProps = {
   sidebarCollapsed?: boolean;
   onToggleSidebar?: () => void;
   onNewTerminal?: () => void;
-  onOpenHelp?: () => void;
+  onOpenAbout?: () => void;
 };
 
 export function TopBar({
   sidebarCollapsed,
   onToggleSidebar,
   onNewTerminal,
-  onOpenHelp,
+  onOpenAbout,
 }: TopBarProps) {
   const handleMinimize = async () => {
     try {
@@ -63,12 +63,12 @@ export function TopBar({
 
       {/* Right: Help, New Terminal, Window Controls */}
       <div className="top-bar-right">
-        {/* Help icon */}
+        {/* About / Charter icon [?] */}
         <button
           type="button"
           className="icon-btn"
-          title="帮助中心"
-          onClick={onOpenHelp}
+          title="关于 Atrium / 智役宪章"
+          onClick={onOpenAbout}
         >
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <circle cx="12" cy="12" r="10" />

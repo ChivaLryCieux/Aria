@@ -1,8 +1,6 @@
 import React from "react";
 import { AiProfile, ReasoningEffort } from "../types/chat";
 
-export const KERNEL_MODEL_CATALOG = ["deepseek-flash", "deepseek-v4-pro"] as const;
-
 const EFFORT_LABEL: Record<ReasoningEffort, string> = {
   max: "最高",
   high: "标准",
@@ -120,19 +118,20 @@ export function CenterHome({
 
           {/* Right Controls (No button background / no emoji) */}
           <div className="footer-right-controls">
-            {/* Model Tag - Cycles the kernel model catalog */}
+            {/* Model Tag - Cycles the active provider's model list */}
             <button
               type="button"
               className="model-tag-pill"
               title="切换底层模型"
               onClick={() => {
-                const models = KERNEL_MODEL_CATALOG as readonly string[];
-                const curIdx = models.indexOf(selectedModel);
+                const models = (activeProfile?.models ?? []).filter((m) => m.name.trim());
+                if (models.length === 0) return;
+                const curIdx = models.findIndex((m) => m.name === selectedModel);
                 const nextModel = models[(curIdx + 1) % models.length];
-                onSelectModel(nextModel);
+                onSelectModel(nextModel.name);
               }}
             >
-              <span>ds/{selectedModel || "deepseek-flash"}</span>
+              <span>ds/{selectedModel || activeProfile?.model || "deepseek-flash"}</span>
               <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
               </svg>

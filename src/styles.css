@@ -1544,3 +1544,67 @@ button, input, textarea, select, [role="button"], a {
   --shadow-card: 0 10px 30px -4px rgba(0, 0, 0, 0.4), 0 4px 12px -2px rgba(0, 0, 0, 0.3);
   --shadow-modal: 0 20px 40px -10px rgba(0, 0, 0, 0.6);
 }
+
+/* ─── Provider editor (custom-only model settings) ─────────── */
+.provider-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.provider-text .provider-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.provider-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.model-edit-row {
+  display: grid;
+  grid-template-columns: 1fr 140px auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 12px;
+}
+
+.model-edit-row .zcode-input {
+  height: 30px;
+  font-size: 12px;
+}
+
+.model-row-remove {
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-xs);
+  font-size: 12px;
+}
+
+.model-row-remove:hover {
+  color: var(--accent-danger);
+  background: var(--bg-pill);
+}
+
+.detail-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-subtle);
+  margin-top: 4px;
+}

@@ -1,10 +1,18 @@
+export type ProviderModel = {
+  id: string;
+  name: string;
+  contextLength?: number | null;
+};
+
 export type AiProfile = {
   id: string;
   name: string;
+  description: string;
   avatar: string;
   endpoint: string;
   apiKey: string;
   model: string;
+  models: ProviderModel[];
   systemPrompt: string;
   temperature: number;
 };

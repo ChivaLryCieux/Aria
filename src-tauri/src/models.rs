@@ -4,13 +4,28 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ProviderModel {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub context_length: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AiProfile {
     pub id: String,
     pub name: String,
+    /// Optional human-readable description; empty allowed.
+    #[serde(default)]
+    pub description: String,
     pub avatar: String,
     pub endpoint: String,
     pub api_key: String,
     pub model: String,
+    /// Models offered by this provider; `model` names the default entry.
+    #[serde(default)]
+    pub models: Vec<ProviderModel>,
     pub system_prompt: String,
     pub temperature: f32,
 }

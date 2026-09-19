@@ -3,10 +3,35 @@ use std::{fs, path::PathBuf};
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
-use crate::models::{AiProfile, AppSettings, ChatMessage};
+use crate::models::{AiProfile, AppSettings, ChatMessage, ProviderModel};
 
 const SETTINGS_FILE: &str = "settings.json";
 const HISTORY_FILE: &str = "chat_history.json";
+
+/// Kernel-aligned seed catalog for profiles that carry no model list yet.
+fn seed_models(default: Option<&str>) -> Vec<ProviderModel> {
+    let catalog = [
+        ("deepseek-flash", Some(1_000_000u64)),
+        ("deepseek-v4-pro", Some(1_000_000)),
+    ];
+    let mut models: Vec<ProviderModel> = catalog
+        .iter()
+        .map(|(name, ctx)| ProviderModel {
+            id: Uuid::new_v4().to_string(),
+            name: name.to_string(),
+            context_length: *ctx,
+        })
+        .collect();
+    if let Some(name) = default.map(str::trim).filter(|s| !s.is_empty()) {
+        if !models.iter().any(|m| m.name == name) {
+            models.insert(
+                0,
+                ProviderModel { id: Uuid::new_v4().to_string(), name: name.to_string(), context_length: None },
+            );
+        }
+    }
+    models
+}
 
 // ─── Paths ─────────────────────────────────────────────────────
 
@@ -44,10 +69,12 @@ fn default_profile() -> AiProfile {
     AiProfile {
         id: "atrium-prime".to_string(),
         name: "Atrium Prime".to_string(),
+        description: String::new(),
         avatar: "ATRIUM".to_string(),
         endpoint: "https://api.deepseek.com/v1/chat/completions".to_string(),
         api_key: String::new(),
         model: "deepseek-flash".to_string(),
+        models: seed_models(Some("deepseek-flash")),
         system_prompt: "你是 Atrium 智役中庭的主控智能体（Atrium Prime）。作为装具中枢，你冷静、精确、恪守事实，提供高信息密度、逻辑严谨的工程与技术分析。".to_string(),
         temperature: 0.5,
     }
@@ -60,6 +87,15 @@ fn normalize_settings(mut settings: AppSettings) -> AppSettings {
     }
     if settings.orchestration_mode != "dag" && settings.orchestration_mode != "parallel" {
         settings.orchestration_mode = "dag".to_string();
+    }
+    for profile in &mut settings.ai_profiles {
+        // Legacy settings carry a single `model` string and no list.
+        if profile.models.is_empty() {
+            profile.models = seed_models(Some(&profile.model));
+        }
+        if profile.model.trim().is_empty() {
+            profile.model = profile.models.first().map(|m| m.name.clone()).unwrap_or_default();
+        }
     }
     if let Some(effort) = &settings.reasoning_effort {
         if !["off", "low", "high", "max"].contains(&effort.as_str()) {
@@ -258,11 +294,13 @@ pub fn delete_session(app: &AppHandle, session_id: &str) -> Result<(), String> {
 pub fn create_profile() -> AiProfile {
     AiProfile {
         id: Uuid::new_v4().to_string(),
-        name: "Agent Node".to_string(),
+        name: String::new(),
+        description: String::new(),
         avatar: "NODE".to_string(),
         endpoint: "https://api.deepseek.com/v1/chat/completions".to_string(),
         api_key: String::new(),
         model: "deepseek-flash".to_string(),
+        models: seed_models(Some("deepseek-flash")),
         system_prompt: "你是搭载于 Atrium 智役中庭的高效工程智能体，专注于结构化分析与解决问题。".to_string(),
         temperature: 0.5,
     }

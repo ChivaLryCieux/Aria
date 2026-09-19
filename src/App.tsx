@@ -194,6 +194,14 @@ export function App() {
     );
   }, [activeProfileId, settings]);
 
+  // ── Follow the active profile's default model on switch ──────
+  useEffect(() => {
+    if (activeProfile?.model) {
+      setSelectedModel(activeProfile.model);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProfileId]);
+
   // ── Build Orchestration Stages ───────────────────────────────
   useEffect(() => {
     if (!activeProfile || !settings) return;

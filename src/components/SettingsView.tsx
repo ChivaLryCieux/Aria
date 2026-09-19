@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { AppSettings, AiProfile, TokenMetrics } from "../types/chat";
-import { KERNEL_MODEL_CATALOG } from "./CenterHome";
+import { AppSettings, AiProfile, ProviderModel, TokenMetrics } from "../types/chat";
 
 type SettingsTab = "general" | "appearance" | "model" | "tokens";
 
@@ -112,6 +111,37 @@ export function SettingsView({
     } catch (err) {
       alert(`通道自检失败：${String(err)}`);
     }
+  };
+
+  const displayName = (profile: AiProfile, index: number) =>
+    profile.name.trim() || `供应商${index + 1}`;
+
+  const profileIndex = settings.aiProfiles.findIndex((p) => p.id === currentProfile?.id);
+
+  const updateModels = (models: ProviderModel[]) => {
+    handleUpdateCurrentProfile({ models });
+  };
+
+  const handleAddModel = () => {
+    if (!currentProfile) return;
+    updateModels([
+      ...currentProfile.models,
+      { id: crypto.randomUUID(), name: "", contextLength: null },
+    ]);
+  };
+
+  const handleUpdateModel = (modelId: string, patch: Partial<ProviderModel>) => {
+    if (!currentProfile) return;
+    updateModels(currentProfile.models.map((m) => (m.id === modelId ? { ...m, ...patch } : m)));
+  };
+
+  const handleRemoveModel = (modelId: string) => {
+    if (!currentProfile) return;
+    updateModels(currentProfile.models.filter((m) => m.id !== modelId));
+  };
+
+  const handleSetDefaultModel = (name: string) => {
+    handleUpdateCurrentProfile({ model: name.trim() });
   };
 
   return (
@@ -353,7 +383,7 @@ export function SettingsView({
         )}
 
         {/* ========================================================= */}
-        {/* TAB 3: 模型设置 (1:1 参考 ZCode 截图布局)                 */}
+        {/* TAB 3: 模型设置（全部为自定义供应商）                      */}
         {/* ========================================================= */}
         {activeTab === "model" && (
           <div className="settings-tab-pane">
@@ -363,13 +393,6 @@ export function SettingsView({
                 <p className="pane-subtitle">管理自定义模型供应商，配置后可在聊天时选择使用。</p>
               </div>
               <div style={{ display: "flex", gap: "8px" }}>
-                <button type="button" className="zcode-icon-btn" title="刷新服务可用性">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M23 4v6h-6" />
-                    <path d="M1 20v-6h6" />
-                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-                  </svg>
-                </button>
                 <button type="button" className="zcode-btn-primary" onClick={handleAddProvider}>
                   + 添加供应商
                 </button>
@@ -379,157 +402,178 @@ export function SettingsView({
             <div className="model-split-view">
               {/* Left Column: Providers List */}
               <div className="providers-column">
-                <div className="column-subheading">官方与预设</div>
-                <div
-                  className={`provider-list-item ${currentProfile?.name.includes("BigModel") ? "active" : ""}`}
-                  onClick={() => {
-                    const found = settings.aiProfiles.find((p) => p.name.includes("BigModel"));
-                    if (found) setActiveProfileId(found.id);
-                  }}
-                >
-                  <span className="provider-icon">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2">
-                      <polygon points="12 2 2 7 12 12 22 7 12 2" />
-                      <polyline points="2 17 12 22 22 17" />
-                      <polyline points="2 12 12 17 22 12" />
-                    </svg>
-                  </span>
-                  <span className="provider-name">BigModel</span>
-                  <span className="status-dot warning" title="体验通道" />
-                </div>
-
-                <div className="column-subheading">自定义供应商</div>
-                {settings.aiProfiles.map((profile) => (
-                  <div
-                    key={profile.id}
-                    className={`provider-list-item ${currentProfile?.id === profile.id ? "active" : ""}`}
-                    onClick={() => setActiveProfileId(profile.id)}
-                  >
-                    <span className="provider-icon">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                      </svg>
-                    </span>
-                    <span className="provider-name">{profile.name}</span>
-                    <span className="status-dot success" title="运行就绪" />
-                  </div>
-                ))}
+                <div className="column-subheading">供应商</div>
+                {settings.aiProfiles.map((profile, index) => {
+                  const ready = profile.apiKey.trim() !== "" && profile.endpoint.trim() !== "";
+                  return (
+                    <div
+                      key={profile.id}
+                      className={`provider-list-item ${currentProfile?.id === profile.id ? "active" : ""}`}
+                      onClick={() => setActiveProfileId(profile.id)}
+                    >
+                      <span className="provider-icon">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                        </svg>
+                      </span>
+                      <span className="provider-text">
+                        <span className="provider-name">{displayName(profile, index)}</span>
+                        {profile.description.trim() && (
+                          <span className="provider-desc">{profile.description}</span>
+                        )}
+                      </span>
+                      <span
+                        className={`status-dot ${ready ? "success" : "warning"}`}
+                        title={ready ? "凭据与端点已配置" : "待配置端点或凭据"}
+                      />
+                    </div>
+                  );
+                })}
               </div>
 
               {/* Right Column: Provider Detail Card */}
               <div className="provider-detail-column">
-                <div className="provider-detail-card">
-                  {/* Card Top Row */}
-                  <div className="detail-card-header">
-                    <div className="provider-title-group">
+                {currentProfile ? (
+                  <div className="provider-detail-card">
+                    {/* Identity */}
+                    <div className="detail-card-header">
                       <span className="provider-badge-icon">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2">
-                          <polygon points="12 2 2 7 12 12 22 7 12 2" />
-                          <polyline points="2 17 12 22 22 17" />
+                          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
                         </svg>
                       </span>
-                      <h3>{currentProfile?.name || "DeepSeek"}</h3>
+                      <h3>{displayName(currentProfile, profileIndex < 0 ? 0 : profileIndex)}</h3>
                     </div>
 
-                    <div className="connect-mode-group">
-                      <span className="connect-mode-label">连接方式</span>
-                      <select className="zcode-select small">
-                        <option value="direct">API 密钥认证</option>
-                        <option value="proxy">体验套餐</option>
-                        <option value="local">本地 Ollama / vLLM</option>
-                      </select>
-                    </div>
-                  </div>
+                    {/* Connection Config Form */}
+                    <div className="config-form-section">
+                      <div className="form-item">
+                        <label>供应商名称（可空）</label>
+                        <input
+                          type="text"
+                          className="zcode-input"
+                          value={currentProfile.name}
+                          onChange={(e) => handleUpdateCurrentProfile({ name: e.target.value })}
+                          placeholder={`供应商${profileIndex < 0 ? 1 : profileIndex + 1}`}
+                        />
+                      </div>
 
-                  {/* Build / Auth Banner */}
-                  <div className="provider-banner">
-                    <div className="banner-left">
-                      <strong>ZCode / Atrium Engine Link</strong>
-                      <div className="banner-sub">
-                        <span className="text-success">待生效 23:00</span>
-                        <span> · 验证周期 2026-09-20</span>
+                      <div className="form-item">
+                        <label>描述（可空）</label>
+                        <input
+                          type="text"
+                          className="zcode-input"
+                          value={currentProfile.description}
+                          onChange={(e) => handleUpdateCurrentProfile({ description: e.target.value })}
+                          placeholder="例如：DeepSeek 官方 API"
+                        />
+                      </div>
+
+                      <div className="form-item">
+                        <label>Base URL</label>
+                        <input
+                          type="text"
+                          className="zcode-input"
+                          value={currentProfile.endpoint}
+                          onChange={(e) => handleUpdateCurrentProfile({ endpoint: e.target.value })}
+                          placeholder="https://api.deepseek.com/v1"
+                        />
+                      </div>
+
+                      <div className="form-item">
+                        <label>API Key</label>
+                        <input
+                          type="password"
+                          className="zcode-input"
+                          value={currentProfile.apiKey}
+                          onChange={(e) => handleUpdateCurrentProfile({ apiKey: e.target.value })}
+                          placeholder="sk-..."
+                        />
                       </div>
                     </div>
-                    <div className="banner-right">
+
+                    {/* Models List Section */}
+                    <div className="models-list-section">
+                      <div className="models-list-header">
+                        <span>模型列表</span>
+                        <button type="button" className="zcode-btn-secondary small" onClick={handleAddModel}>
+                          + 添加模型
+                        </button>
+                      </div>
+
+                      <div className="models-table">
+                        {currentProfile.models.length > 0 ? (
+                          currentProfile.models.map((model) => (
+                            <div key={model.id} className="model-edit-row">
+                              <input
+                                type="text"
+                                className="zcode-input"
+                                value={model.name}
+                                onChange={(e) => handleUpdateModel(model.id, { name: e.target.value })}
+                                placeholder="模型名称，如 deepseek-flash"
+                              />
+                              <input
+                                type="text"
+                                className="zcode-input"
+                                value={model.contextLength ?? ""}
+                                onChange={(e) => {
+                                  const raw = e.target.value.replace(/[^0-9]/g, "");
+                                  handleUpdateModel(model.id, { contextLength: raw === "" ? null : Number(raw) });
+                                }}
+                                placeholder="上下文长度"
+                              />
+                              <button
+                                type="button"
+                                className={`zcode-btn-secondary small ${currentProfile.model === model.name.trim() && model.name.trim() ? "active" : ""}`}
+                                disabled={!model.name.trim()}
+                                onClick={() => handleSetDefaultModel(model.name)}
+                                title="将此模型设为该供应商默认模型"
+                              >
+                                {model.name.trim() !== "" && currentProfile.model === model.name.trim() ? "默认" : "设为默认"}
+                              </button>
+                              <button
+                                type="button"
+                                className="model-row-remove"
+                                onClick={() => handleRemoveModel(model.id)}
+                                title="删除模型"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="model-row-item" style={{ color: "var(--text-muted)", justifyContent: "center", padding: "14px" }}>
+                            暂无模型，点击「+ 添加模型」创建
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="detail-actions">
                       <button
                         type="button"
                         className="zcode-btn-dark-pill"
                         onClick={handleProbeProvider}
-                        title="使用当前端点与凭据执行连通性自检"
+                        title="使用当前 Base URL 与 API Key 执行连通性自检"
                       >
                         测试通道
                       </button>
                       <button
                         type="button"
-                        className="zcode-btn-danger small"
+                        className="zcode-btn-danger"
                         onClick={handleDeleteProvider}
-                        title="删除当前自定义供应商"
+                        title="删除当前供应商"
                       >
-                        删除
+                        删除供应商
                       </button>
                     </div>
                   </div>
-
-                  {/* Connection Config Form */}
-                  <div className="config-form-section">
-                    <div className="form-item">
-                      <label>API 基础端点 (Base URL)</label>
-                      <input
-                        type="text"
-                        className="zcode-input"
-                        value={currentProfile?.endpoint || ""}
-                        onChange={(e) => handleUpdateCurrentProfile({ endpoint: e.target.value })}
-                        placeholder="https://api.deepseek.com/v1"
-                      />
-                    </div>
-
-                    <div className="form-item">
-                      <label>API Key 认证凭据</label>
-                      <input
-                        type="password"
-                        className="zcode-input"
-                        value={currentProfile?.apiKey || ""}
-                        onChange={(e) => handleUpdateCurrentProfile({ apiKey: e.target.value })}
-                        placeholder="sk-..."
-                      />
-                    </div>
+                ) : (
+                  <div className="provider-detail-card" style={{ color: "var(--text-muted)" }}>
+                    暂无供应商，点击右上角「+ 添加供应商」创建。
                   </div>
-
-                  {/* Models List Section */}
-                  <div className="models-list-section">
-                    <div className="models-list-header">
-                      <span>可用模型列表</span>
-                      <button
-                        type="button"
-                        className="zcode-btn-secondary small"
-                        onClick={() => {
-                          const model = prompt("请输入要添加的模型 ID (如 deepseek-reasoner):");
-                          if (model) handleUpdateCurrentProfile({ model });
-                        }}
-                      >
-                        + 添加模型
-                      </button>
-                    </div>
-
-                    <div className="models-table">
-                      {KERNEL_MODEL_CATALOG.map((modelId) => (
-                        <div key={modelId} className="model-row-item">
-                          <div className="model-info">
-                            <span className="model-title">{modelId}</span>
-                            <span className="model-tag">DSH 内核目录</span>
-                          </div>
-                          <button
-                            type="button"
-                            className={`zcode-btn-secondary small ${currentProfile?.model === modelId ? "active" : ""}`}
-                            onClick={() => handleUpdateCurrentProfile({ model: modelId })}
-                          >
-                            {currentProfile?.model === modelId ? "使用中" : "设为默认"}
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
+                )}
               </div>
             </div>
           </div>

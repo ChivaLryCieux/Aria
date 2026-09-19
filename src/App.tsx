@@ -12,10 +12,11 @@ import {
   ChatMessage,
   OrchestrationProgressEvent,
   OrchestrationStage,
+  PendingMessage,
   SessionSummary,
 } from "./types/chat";
 import { createPendingMessages } from "./utils/messages";
-import { dshClient } from "./services/dshClient";
+import { dshClient, KernelStatusEvent } from "./services/dshClient";
 
 export function App() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -31,9 +32,15 @@ export function App() {
   const [isHelpOpen, setIsHelpOpen] = useState<boolean>(false);
   const [workspacePath, setWorkspacePath] = useState<string>("");
   const [orchestrationStages, setOrchestrationStages] = useState<OrchestrationStage[]>([]);
+  const [kernelStatus, setKernelStatus] = useState<KernelStatusEvent | null>(null);
 
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const messageEndRef = useRef<HTMLDivElement | null>(null);
+  const activeSessionIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    activeSessionIdRef.current = activeSessionId;
+  }, [activeSessionId]);
 
   // ── Load Settings, Sessions & History ────────────────────────
   useEffect(() => {
@@ -96,6 +103,26 @@ export function App() {
 
     // Initialize DSH daemon client in background
     dshClient.init().catch(console.error);
+
+    // Live kernel stream: streamed deltas land in the matching pending node.
+    const unlistenStream = dshClient.onStream((chunk) => {
+      if (chunk.conversationId && chunk.conversationId !== activeSessionIdRef.current) return;
+      if (!chunk.stageId || !chunk.content) return;
+      setMessages((prev) =>
+        prev.map((msg) => {
+          if (msg.id !== chunk.stageId || !msg.pending) return msg;
+          const isPlaceholder = msg.content === "思考中..." || msg.content.includes("正在解析推演中");
+          return { ...msg, content: isPlaceholder ? chunk.content! : msg.content + chunk.content! };
+        })
+      );
+    });
+
+    const unlistenKernelStatus = dshClient.onKernelStatus((event) => setKernelStatus(event));
+
+    return () => {
+      unlistenStream();
+      unlistenKernelStatus();
+    };
   }, []);
 
   // ── Auto-scroll to latest message ────────────────────────────
@@ -237,7 +264,21 @@ export function App() {
 
     const userMessage = createUserMessage(draft.trim(), settings.userName || "Tempsyche");
     const baseMessages = [...messages, userMessage];
-    const pendingMessages = createPendingMessages([activeProfile]);
+
+    // One pending bubble per pipeline node; its id equals the stage id so the
+    // kernel's streamed deltas and settled replies land in the same node.
+    const pendingMessages: PendingMessage[] =
+      orchestrationStages.length > 0
+        ? orchestrationStages.map((stage) => ({
+            id: stage.id,
+            role: "assistant" as const,
+            content: "思考中...",
+            speakerId: stage.profile.id,
+            speakerName: `${stage.title} · ${stage.profile.name}`,
+            avatar: stage.profile.avatar,
+            pending: true as const,
+          }))
+        : createPendingMessages([activeProfile]);
 
     setDraft("");
     setIsSending(true);
@@ -247,11 +288,13 @@ export function App() {
       const unlisten = await listen<OrchestrationProgressEvent>(
         "orchestration-progress",
         (event) => {
-          const { stageTitle, status: eventStatus } = event.payload;
+          const { stageId, stageTitle, status: eventStatus } = event.payload;
           if (eventStatus === "running") {
             setMessages((prev) =>
               prev.map((msg) =>
-                msg.pending ? { ...msg, content: `[${stageTitle}] 正在解析推演中...` } : msg
+                msg.pending && (!stageId || msg.id === stageId) && msg.content === "思考中..."
+                  ? { ...msg, content: `[${stageTitle}] 正在解析推演中...` }
+                  : msg
               )
             );
           }
@@ -269,6 +312,7 @@ export function App() {
           ],
           messages: baseMessages,
           mode: settings.orchestrationMode,
+          conversationId: curSessionId,
         },
       });
 
@@ -338,6 +382,7 @@ export function App() {
     <div className="app-container">
       {/* 1:1 Top Bar */}
       <TopBar
+        kernelStatus={kernelStatus}
         onNewTerminal={() => {
           setCurrentView("workspace");
           handleNewTask();
@@ -407,7 +452,7 @@ export function App() {
                       <div className="bubble-body">
                         {msg.role === "assistant" && (
                           <div className="speaker-header">
-                            <span className="node-badge">ZCode // {msg.speakerName}</span>
+                            <span className="node-badge">ATRIUM // {msg.speakerName}</span>
                             {msg.pending && <span>思考生成中...</span>}
                           </div>
                         )}
@@ -423,7 +468,7 @@ export function App() {
                   <div className="prompt-card" style={{ width: "720px" }}>
                     <textarea
                       className="prompt-textarea"
-                      placeholder="向 ZCode 提问，继续跟进任务..."
+                      placeholder="向 Atrium 提问，继续跟进任务..."
                       value={draft}
                       onChange={(e) => setDraft(e.target.value)}
                       onKeyDown={(e) => {

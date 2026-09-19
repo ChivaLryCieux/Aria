@@ -1494,3 +1494,16 @@ button, input, textarea, select, [role="button"], a {
   margin-top: 2px;
 }
 
+
+/* ─── TopBar kernel status chip ─────────────────────────────── */
+.kernel-status-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  color: var(--text-secondary, #555);
+  font-family: var(--font-mono, monospace);
+  user-select: none;
+}

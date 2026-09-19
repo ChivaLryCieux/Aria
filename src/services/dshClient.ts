@@ -1,4 +1,4 @@
-﻿import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '@tauri-apps/api/core';
 
 export interface HarnessConnectionInfo {
   status: 'standby' | 'ready' | 'connected' | 'stopped' | 'error';
@@ -14,10 +14,17 @@ export interface DshStreamChunk {
   content?: string;
   stageId?: string;
   speakerName?: string;
+  conversationId?: string;
+}
+
+export interface KernelStatusEvent {
+  status: 'starting' | 'ready' | 'error' | 'missing' | 'stopping';
+  detail?: string;
 }
 
 export type StreamListener = (chunk: DshStreamChunk) => void;
 export type TelemetryListener = (event: any) => void;
+export type KernelStatusListener = (event: KernelStatusEvent) => void;
 
 class DshClient {
   private connection: HarnessConnectionInfo = {
@@ -28,6 +35,7 @@ class DshClient {
   private ws: WebSocket | null = null;
   private streamListeners: Set<StreamListener> = new Set();
   private telemetryListeners: Set<TelemetryListener> = new Set();
+  private kernelStatusListeners: Set<KernelStatusListener> = new Set();
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
   async init(): Promise<HarnessConnectionInfo> {
@@ -40,7 +48,7 @@ class DshClient {
       this.connectWebSocket();
       return this.connection;
     } catch (error) {
-      console.warn('[DshClient] Native daemon not accessible, running in fallback mode:', error);
+      console.warn('[DshClient] Kernel bridge unavailable, direct-API fallback stays active:', error);
       this.connection.status = 'standby';
       return this.connection;
     }
@@ -58,7 +66,7 @@ class DshClient {
 
       this.ws.onopen = () => {
         this.connection.status = 'connected';
-        console.log('[DshClient] WebSocket connected to DSH Core Host:', wsUrl);
+        console.log('[DshClient] WebSocket connected to kernel bridge:', wsUrl);
       };
 
       this.ws.onmessage = (event) => {
@@ -68,6 +76,8 @@ class DshClient {
             this.streamListeners.forEach((fn) => fn(payload));
           } else if (payload.type === 'telemetry') {
             this.telemetryListeners.forEach((fn) => fn(payload));
+          } else if (payload.type === 'kernel-status') {
+            this.kernelStatusListeners.forEach((fn) => fn(payload));
           }
         } catch (e) {
           console.error('[DshClient] Failed to parse message:', e);
@@ -87,7 +97,7 @@ class DshClient {
       };
 
       this.ws.onerror = (e) => {
-        console.warn('[DshClient] WS error (normal during daemon startup):', e);
+        console.warn('[DshClient] WS error (normal during bridge startup):', e);
       };
     } catch (err) {
       console.warn('[DshClient] Could not establish WS connection:', err);
@@ -102,6 +112,11 @@ class DshClient {
   onTelemetry(listener: TelemetryListener): () => void {
     this.telemetryListeners.add(listener);
     return () => this.telemetryListeners.delete(listener);
+  }
+
+  onKernelStatus(listener: KernelStatusListener): () => void {
+    this.kernelStatusListeners.add(listener);
+    return () => this.kernelStatusListeners.delete(listener);
   }
 
   getConnection(): HarnessConnectionInfo {

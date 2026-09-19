@@ -1,6 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
+import { KernelStatusEvent } from "../services/dshClient";
 
 type TopBarProps = {
+  kernelStatus?: KernelStatusEvent | null;
   onNewTerminal?: () => void;
   onOpenHelp?: () => void;
   canGoBack?: boolean;
@@ -9,7 +11,16 @@ type TopBarProps = {
   onGoForward?: () => void;
 };
 
+const KERNEL_STATUS_META: Record<string, { color: string; label: string }> = {
+  ready: { color: "var(--signal-green, #3fb27f)", label: "内核在线" },
+  starting: { color: "var(--signal-amber, #d9a441)", label: "内核启动中" },
+  error: { color: "var(--accent-danger, #c2543e)", label: "内核异常" },
+  missing: { color: "var(--accent-danger, #c2543e)", label: "内核未构建" },
+  stopping: { color: "var(--text-dim, #8a8a8a)", label: "内核停止中" },
+};
+
 export function TopBar({
+  kernelStatus,
   onNewTerminal,
   onOpenHelp,
   canGoBack = false,
@@ -80,6 +91,26 @@ export function TopBar({
 
       {/* Right: Help, New Terminal, Window Controls */}
       <div className="top-bar-right">
+        {/* Kernel status indicator */}
+        <div
+          className="kernel-status-chip"
+          title={kernelStatus?.detail || "DSH 内核状态"}
+        >
+          <span
+            className="status-dot"
+            style={{
+              width: "7px",
+              height: "7px",
+              borderRadius: "50%",
+              background: KERNEL_STATUS_META[kernelStatus?.status ?? ""]?.color ?? "var(--text-dim, #8a8a8a)",
+              display: "inline-block",
+            }}
+          />
+          <span style={{ fontSize: "11px", letterSpacing: "0.5px" }}>
+            {KERNEL_STATUS_META[kernelStatus?.status ?? ""]?.label ?? "DSH 内核"}
+          </span>
+        </div>
+
         {/* Help icon */}
         <button
           type="button"

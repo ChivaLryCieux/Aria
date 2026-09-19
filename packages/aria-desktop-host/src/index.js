@@ -115,6 +115,7 @@ const EXECUTION_MODE_SANDBOX = {
 function routeKey(request) {
   return [
     request.provider ?? 'deepseek-official',
+    request.baseUrl ?? 'inherit',
     request.model ?? 'deepseek-flash',
     request.reasoningEffort ?? 'default',
     fingerprint(request.apiKey),
@@ -130,6 +131,7 @@ async function ensureHarness(request) {
 
   const childEnv = { ...process.env }
   if (request.apiKey) childEnv.DEEPSEEK_API_KEY = request.apiKey
+  // Bare base URL (no /chat/completions path); the kernel appends it.
   if (request.baseUrl) childEnv.DEEPSEEK_BASE_URL = request.baseUrl
   if (args.dshHome) childEnv.DSH_HOME = args.dshHome
   const sandboxMode = EXECUTION_MODE_SANDBOX[request.executionMode]

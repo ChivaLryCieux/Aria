@@ -136,8 +136,11 @@ export function App() {
     dshClient.init().catch(console.error);
 
     // Live kernel stream: streamed deltas land in the matching pending node.
+    // Parallel-mode sub-conversations are suffixed `::parallel-N`, so prefix
+    // matching keeps their deltas flowing to the same session view.
     const unlistenStream = dshClient.onStream((chunk) => {
-      if (chunk.conversationId && chunk.conversationId !== activeSessionIdRef.current) return;
+      const active = activeSessionIdRef.current;
+      if (chunk.conversationId && (!active || !chunk.conversationId.startsWith(active))) return;
       if (!chunk.stageId || !chunk.content) return;
       setMessages((prev) =>
         prev.map((msg) => {

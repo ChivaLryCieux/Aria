@@ -146,7 +146,7 @@ pub async fn execute(
     if kernel_ready {
         let conversation = conversation_id.unwrap_or_else(|| format!("adhoc-{}", Uuid::new_v4()));
         if mode == "parallel" {
-            execute_parallel_kernel(kernel_http, profiles, base_messages, &conversation, reasoning_effort, execution_mode, project, soul).await
+            execute_parallel_kernel(app, kernel_http, profiles, base_messages, &conversation, reasoning_effort, execution_mode, project, soul).await
         } else {
             execute_dag_kernel(app, kernel_http, profiles, base_messages, &conversation, reasoning_effort, execution_mode, project, soul).await
         }
@@ -167,6 +167,10 @@ struct KernelTurnRequest {
     provider: String,
     model: String,
     api_key: String,
+    /// Bare base URL for the kernel provider (DEEPSEEK_BASE_URL); the kernel
+    /// appends `/chat/completions` itself, so full endpoints are reduced.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    base_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_effort: Option<String>,
     /// Kernel process cwd for this turn (the project's default directory).
@@ -231,6 +235,24 @@ fn latest_user_input(messages: &[ChatMessage]) -> String {
         .find(|m| m.role == "user")
         .map(|m| m.content.clone())
         .unwrap_or_default()
+}
+
+/// Reduce a user-configured chat endpoint to the bare base URL the kernel
+/// provider expects: it appends `/chat/completions` itself, so a stored
+/// endpoint of `https://host/v1/chat/completions` must become
+/// `https://host/v1`, while already-bare entries pass through unchanged.
+fn normalize_base_url(endpoint: &str) -> Option<String> {
+    let trimmed = endpoint.trim().trim_end_matches('/');
+    if trimmed.is_empty() {
+        return None;
+    }
+    let base = trimmed
+        .strip_suffix("/chat/completions")
+        .or_else(|| trimmed.strip_suffix("/responses"))
+        .unwrap_or(trimmed)
+        .trim_end_matches('/')
+        .to_string();
+    (!base.is_empty()).then_some(base)
 }
 
 fn kernel_stage_prompt(stage: &OrchestrationStage, index: usize, user_input: &str, soul: Option<&str>) -> String {
@@ -298,6 +320,7 @@ async fn execute_dag_kernel(
             provider: "deepseek-official".to_string(),
             model: stage.profile.model.clone(),
             api_key: stage.profile.api_key.clone(),
+            base_url: normalize_base_url(&stage.profile.endpoint),
             reasoning_effort: reasoning_effort.clone(),
             workspace: workspace.clone(),
             execution_mode: execution_mode.clone(),
@@ -389,6 +412,7 @@ fn record_turn_usage(
 }
 
 async fn execute_parallel_kernel(
+    app: &AppHandle,
     http: &Client,
     profiles: &[AiProfile],
     base_messages: &[ChatMessage],
@@ -414,16 +438,16 @@ async fn execute_parallel_kernel(
             provider: "deepseek-official".to_string(),
             model: profile.model.clone(),
             api_key: profile.api_key.clone(),
+            base_url: normalize_base_url(&profile.endpoint),
             reasoning_effort: reasoning_effort.clone(),
             workspace: workspace.clone(),
             execution_mode: execution_mode.clone(),
-            prompt,
+            prompt: prompt.clone(),
         };
         async move {
-            match post_turn(http, daemon_url, &request, std::time::Duration::from_secs(600)).await {
-                Ok(turn) => (profile, Ok(turn.final_response)),
-                Err(err) => (profile, Err(err)),
-            }
+            let start_time = std::time::Instant::now();
+            let result = post_turn(http, daemon_url, &request, std::time::Duration::from_secs(600)).await;
+            (profile, prompt, start_time, result)
         }
     });
 
@@ -431,9 +455,13 @@ async fn execute_parallel_kernel(
 
     results
         .into_iter()
-        .map(|(profile, result)| {
+        .map(|(profile, prompt, start_time, result)| {
             let (content, error) = match result {
-                Ok(text) => (text, false),
+                Ok(turn) => {
+                    let latency = start_time.elapsed().as_millis() as u64;
+                    record_turn_usage(app, profile.model.trim(), &prompt, &turn, latency, project);
+                    (turn.final_response, false)
+                }
                 Err(err) => (err, true),
             };
             ChatMessage {

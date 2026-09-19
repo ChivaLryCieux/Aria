@@ -55,6 +55,26 @@ fn history_path(app: &AppHandle) -> Result<PathBuf, String> {
     Ok(config_dir(app)?.join(HISTORY_FILE))
 }
 
+/// Crash-safe write: serialize to a uniquely-named temp file first, then
+/// rename over the target. The unique name keeps concurrent writers (e.g.
+/// settings saved on every keystroke) from corrupting each other's temp file.
+fn atomic_write(path: &PathBuf, contents: &str) -> Result<(), String> {
+    let tmp_path = path.with_extension(format!("json.tmp-{}", Uuid::new_v4().simple()));
+    fs::write(&tmp_path, contents).map_err(|err| format!("无法写入临时文件 {}: {err}", tmp_path.display()))?;
+    match fs::rename(&tmp_path, path) {
+        Ok(()) => Ok(()),
+        Err(rename_err) if path.exists() => {
+            fs::remove_file(path).map_err(|err| format!("无法替换旧文件: {err}"))?;
+            fs::rename(&tmp_path, path)
+                .map_err(|err| format!("无法完成保存: {err}; 初次替换失败: {rename_err}"))
+        }
+        Err(err) => {
+            let _ = fs::remove_file(&tmp_path);
+            Err(format!("无法完成保存: {err}"))
+        }
+    }
+}
+
 // ─── Settings ──────────────────────────────────────────────────
 
 fn default_settings() -> AppSettings {
@@ -134,17 +154,7 @@ pub fn save_settings(app: &AppHandle, settings: &AppSettings) -> Result<(), Stri
     let path = settings_path(app)?;
     let text =
         serde_json::to_string_pretty(settings).map_err(|err| format!("无法序列化设置: {err}"))?;
-    let tmp_path = path.with_extension("json.tmp");
-    fs::write(&tmp_path, text).map_err(|err| format!("无法保存设置: {err}"))?;
-    match fs::rename(&tmp_path, &path) {
-        Ok(()) => Ok(()),
-        Err(rename_err) if path.exists() => {
-            fs::remove_file(&path).map_err(|err| format!("无法替换旧设置文件: {err}"))?;
-            fs::rename(tmp_path, path)
-                .map_err(|err| format!("无法完成设置保存: {err}; 初次替换失败: {rename_err}"))
-        }
-        Err(err) => Err(format!("无法完成设置保存: {err}")),
-    }
+    atomic_write(&path, &text)
 }
 
 // ─── Chat History ──────────────────────────────────────────────
@@ -162,17 +172,7 @@ pub fn save_history(app: &AppHandle, messages: &[ChatMessage]) -> Result<(), Str
     let path = history_path(app)?;
     let text = serde_json::to_string_pretty(messages)
         .map_err(|err| format!("无法序列化聊天记录: {err}"))?;
-    let tmp_path = path.with_extension("json.tmp");
-    fs::write(&tmp_path, text).map_err(|err| format!("无法保存聊天记录: {err}"))?;
-    match fs::rename(&tmp_path, &path) {
-        Ok(()) => Ok(()),
-        Err(rename_err) if path.exists() => {
-            fs::remove_file(&path).map_err(|err| format!("无法替换旧聊天记录: {err}"))?;
-            fs::rename(tmp_path, path)
-                .map_err(|err| format!("无法完成聊天记录保存: {err}; 初次替换失败: {rename_err}"))
-        }
-        Err(err) => Err(format!("无法完成聊天记录保存: {err}")),
-    }
+    atomic_write(&path, &text)
 }
 
 pub fn clear_history(app: &AppHandle) -> Result<(), String> {
@@ -223,11 +223,7 @@ pub fn list_sessions(app: &AppHandle) -> Result<Vec<SessionSummary>, String> {
 pub fn save_session_index(app: &AppHandle, sessions: &[SessionSummary]) -> Result<(), String> {
     let path = sessions_index_path(app)?;
     let text = serde_json::to_string_pretty(sessions).map_err(|e| format!("序列化会话失败: {e}"))?;
-    fs::write(path, text).map_err(|e| format!("保存会话索引失败: {e}"))
-}
-
-pub fn create_session(app: &AppHandle, title: &str) -> Result<SessionSummary, String> {
-    create_session_in_project(app, title, None)
+    atomic_write(&path, &text)
 }
 
 pub fn create_session_in_project(
@@ -277,7 +273,7 @@ pub fn load_session_messages(app: &AppHandle, session_id: &str) -> Result<Vec<Ch
 pub fn save_session_messages(app: &AppHandle, session_id: &str, messages: &[ChatMessage]) -> Result<(), String> {
     let path = sessions_dir(app)?.join(format!("{session_id}.json"));
     let text = serde_json::to_string_pretty(messages).map_err(|e| format!("序列化消息失败: {e}"))?;
-    fs::write(path, text).map_err(|e| format!("写入消息失败: {e}"))?;
+    atomic_write(&path, &text)?;
 
     // Update count in index
     let mut sessions = list_sessions(app).unwrap_or_default();
@@ -365,7 +361,7 @@ pub fn load_projects(app: &AppHandle) -> Result<Vec<Project>, String> {
 fn save_projects(app: &AppHandle, projects: &[Project]) -> Result<(), String> {
     let path = projects_path(app)?;
     let text = serde_json::to_string_pretty(projects).map_err(|e| format!("序列化项目失败: {e}"))?;
-    fs::write(path, text).map_err(|e| format!("保存项目失败: {e}"))
+    atomic_write(&path, &text)
 }
 
 /// Guarantee at least one project exists and every session belongs to one.

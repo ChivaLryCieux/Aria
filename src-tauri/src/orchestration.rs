@@ -122,9 +122,17 @@ pub async fn execute(
     mode: &str,
     conversation_id: Option<String>,
     reasoning_effort: Option<String>,
+    execution_mode: Option<String>,
     project: Option<(&str, &str, Option<&str>)>,
     soul: Option<&str>,
 ) -> Vec<ChatMessage> {
+    // Only kernel-recognized modes pass through; anything else uses the
+    // runtime's shipped default (workspace-write + ask).
+    let execution_mode = execution_mode
+        .as_deref()
+        .filter(|m| matches!(*m, "plan" | "ask" | "auto"))
+        .map(str::to_string);
+
     let kernel_ready = {
         let mut guard = daemon.lock().await;
         if !guard.kernel_available() {
@@ -138,9 +146,9 @@ pub async fn execute(
     if kernel_ready {
         let conversation = conversation_id.unwrap_or_else(|| format!("adhoc-{}", Uuid::new_v4()));
         if mode == "parallel" {
-            execute_parallel_kernel(kernel_http, profiles, base_messages, &conversation, reasoning_effort, project, soul).await
+            execute_parallel_kernel(kernel_http, profiles, base_messages, &conversation, reasoning_effort, execution_mode, project, soul).await
         } else {
-            execute_dag_kernel(app, kernel_http, profiles, base_messages, &conversation, reasoning_effort, project, soul).await
+            execute_dag_kernel(app, kernel_http, profiles, base_messages, &conversation, reasoning_effort, execution_mode, project, soul).await
         }
     } else if mode == "parallel" {
         execute_parallel(http, profiles, base_messages, project, soul).await
@@ -164,6 +172,9 @@ struct KernelTurnRequest {
     /// Kernel process cwd for this turn (the project's default directory).
     #[serde(skip_serializing_if = "Option::is_none")]
     workspace: Option<String>,
+    /// Execution mode: plan | ask | auto (DSH_PERMISSION_MODE in the runtime).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    execution_mode: Option<String>,
     prompt: String,
 }
 
@@ -258,6 +269,7 @@ async fn execute_dag_kernel(
     base_messages: &[ChatMessage],
     conversation: &str,
     reasoning_effort: Option<String>,
+    execution_mode: Option<String>,
     project: Option<(&str, &str, Option<&str>)>,
     soul: Option<&str>,
 ) -> Vec<ChatMessage> {
@@ -288,6 +300,7 @@ async fn execute_dag_kernel(
             api_key: stage.profile.api_key.clone(),
             reasoning_effort: reasoning_effort.clone(),
             workspace: workspace.clone(),
+            execution_mode: execution_mode.clone(),
             prompt: kernel_stage_prompt(stage, index, &user_input, soul),
         };
 
@@ -381,6 +394,7 @@ async fn execute_parallel_kernel(
     base_messages: &[ChatMessage],
     conversation: &str,
     reasoning_effort: Option<String>,
+    execution_mode: Option<String>,
     project: Option<(&str, &str, Option<&str>)>,
     soul: Option<&str>,
 ) -> Vec<ChatMessage> {
@@ -402,6 +416,7 @@ async fn execute_parallel_kernel(
             api_key: profile.api_key.clone(),
             reasoning_effort: reasoning_effort.clone(),
             workspace: workspace.clone(),
+            execution_mode: execution_mode.clone(),
             prompt,
         };
         async move {

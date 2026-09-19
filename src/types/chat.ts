@@ -21,11 +21,14 @@ export type OrchestrationMode = "parallel" | "dag";
 
 export type ReasoningEffort = "off" | "low" | "high" | "max";
 
+export type ExecutionMode = "plan" | "ask" | "auto";
+
 export type AppSettings = {
   userName: string;
   aiProfiles: AiProfile[];
   orchestrationMode: OrchestrationMode;
   reasoningEffort?: ReasoningEffort | null;
+  executionMode?: ExecutionMode | null;
   themeMode?: "light" | "system" | "dark" | null;
   fontSize?: "13px" | "14px" | "15px" | null;
   activeSoul?: string | null;

@@ -13,6 +13,7 @@ import {
   AiProfile,
   AppSettings,
   ChatMessage,
+  ExecutionMode,
   OrchestrationProgressEvent,
   OrchestrationStage,
   PendingMessage,
@@ -22,7 +23,7 @@ import {
   Soul,
 } from "./types/chat";
 import { createPendingMessages } from "./utils/messages";
-import { dshClient, KernelStatusEvent } from "./services/dshClient";
+import { dshClient } from "./services/dshClient";
 
 export function App() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
@@ -37,6 +38,7 @@ export function App() {
   const [activeProfileId, setActiveProfileId] = useState<string>("");
   const [selectedModel, setSelectedModel] = useState<string>("deepseek-flash");
   const [reasoningEffort, setReasoningEffort] = useState<"off" | "low" | "high" | "max">("high");
+  const [executionMode, setExecutionMode] = useState<ExecutionMode>("ask");
   const [draft, setDraft] = useState<string>("");
   const [isSending, setIsSending] = useState<boolean>(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
@@ -44,7 +46,6 @@ export function App() {
   const [isHelpOpen, setIsHelpOpen] = useState<boolean>(false);
   const [workspacePath, setWorkspacePath] = useState<string>("");
   const [orchestrationStages, setOrchestrationStages] = useState<OrchestrationStage[]>([]);
-  const [kernelStatus, setKernelStatus] = useState<KernelStatusEvent | null>(null);
 
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const messageEndRef = useRef<HTMLDivElement | null>(null);
@@ -70,7 +71,11 @@ export function App() {
           }
         }
         if (loaded.reasoningEffort) {
-          setReasoningEffort(loaded.reasoningEffort);
+          // The UI offers three tiers; legacy "off" normalizes to 低耗推理.
+          setReasoningEffort(loaded.reasoningEffort === "off" ? "low" : loaded.reasoningEffort);
+        }
+        if (loaded.executionMode) {
+          setExecutionMode(loaded.executionMode);
         }
       })
       .catch(console.error);
@@ -143,11 +148,8 @@ export function App() {
       );
     });
 
-    const unlistenKernelStatus = dshClient.onKernelStatus((event) => setKernelStatus(event));
-
     return () => {
       unlistenStream();
-      unlistenKernelStatus();
     };
   }, []);
 
@@ -349,6 +351,14 @@ export function App() {
     }
   };
 
+  // ── Execution mode selection (persisted) ─────────────────────
+  const handleSelectExecutionMode = (mode: ExecutionMode) => {
+    setExecutionMode(mode);
+    if (settings) {
+      handleSaveSettings({ ...settings, executionMode: mode });
+    }
+  };
+
   // ── Send Message ─────────────────────────────────────────────
   const handleSend = async () => {
     if (!draft.trim() || !activeProfile || !settings || isSending) return;
@@ -421,6 +431,7 @@ export function App() {
           mode: settings.orchestrationMode,
           conversationId: curSessionId,
           reasoningEffort,
+          executionMode,
         },
       });
 
@@ -494,7 +505,6 @@ export function App() {
       <TopBar
         sidebarCollapsed={isSidebarCollapsed}
         onToggleSidebar={() => setIsSidebarCollapsed((prev) => !prev)}
-        kernelStatus={kernelStatus}
         onNewTerminal={() => {
           setCurrentView("workspace");
           handleNewTask();
@@ -551,6 +561,8 @@ export function App() {
                 onSelectModel={setSelectedModel}
                 reasoningEffort={reasoningEffort}
                 onSelectReasoningEffort={handleSelectReasoningEffort}
+                executionMode={executionMode}
+                onSelectExecutionMode={handleSelectExecutionMode}
               />
             ) : (
               /* Active Conversation View */
@@ -590,6 +602,8 @@ export function App() {
                     onSelectModel={setSelectedModel}
                     reasoningEffort={reasoningEffort}
                     onSelectReasoningEffort={handleSelectReasoningEffort}
+                    executionMode={executionMode}
+                    onSelectExecutionMode={handleSelectExecutionMode}
                   />
                 </div>
               </div>

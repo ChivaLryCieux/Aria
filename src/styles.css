@@ -2046,3 +2046,13 @@ button, input, textarea, select, [role="button"], a {
   color: var(--text-muted);
   white-space: nowrap;
 }
+
+.pill-dropdown-header {
+  padding: 6px 10px 4px;
+  font-size: 10.5px;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 3px;
+  user-select: none;
+}

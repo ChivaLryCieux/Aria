@@ -1,16 +1,22 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ProviderModel, ReasoningEffort, Soul } from "../types/chat";
+import { ExecutionMode, ProviderModel, ReasoningEffort, Soul } from "../types/chat";
 
 const EFFORT_OPTIONS: { key: ReasoningEffort; label: string }[] = [
-  { key: "max", label: "最高" },
-  { key: "high", label: "标准" },
-  { key: "low", label: "低" },
-  { key: "off", label: "关闭" },
+  { key: "max", label: "极致推理" },
+  { key: "high", label: "中等推理" },
+  { key: "low", label: "低耗推理" },
 ];
 
-type DropdownItem = { key: string; label: string };
+const EXECUTION_MODE_OPTIONS: { key: ExecutionMode; label: string; description: string }[] = [
+  { key: "plan", label: "计划模式", description: "只计划，不改文件" },
+  { key: "ask", label: "询问模式", description: "修改和执行命令前询问" },
+  { key: "auto", label: "自动模式", description: "允许目录内的一切修改" },
+];
+
+type DropdownItem = { key: string; label: string; description?: string };
 
 type PillDropdownProps = {
+  header: string;
   label: string;
   items: DropdownItem[];
   selectedKey?: string | null;
@@ -18,7 +24,7 @@ type PillDropdownProps = {
   emptyHint?: string;
 };
 
-function PillDropdown({ label, items, selectedKey, onSelect, emptyHint }: PillDropdownProps) {
+function PillDropdown({ header, label, items, selectedKey, onSelect, emptyHint }: PillDropdownProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
 
@@ -42,12 +48,14 @@ function PillDropdown({ label, items, selectedKey, onSelect, emptyHint }: PillDr
 
       {open && (
         <div className="pill-dropdown-menu">
+          <div className="pill-dropdown-header">{header}</div>
           {items.length === 0 && <div className="pill-dropdown-empty">{emptyHint ?? "暂无可选项"}</div>}
           {items.map((item) => (
             <button
               key={item.key}
               type="button"
               className={`pill-dropdown-item ${item.key === selectedKey ? "active" : ""}`}
+              title={item.description}
               onClick={() => {
                 onSelect(item.key);
                 setOpen(false);
@@ -83,6 +91,8 @@ type PromptCardProps = {
   onSelectModel: (name: string) => void;
   reasoningEffort: ReasoningEffort;
   onSelectReasoningEffort: (effort: ReasoningEffort) => void;
+  executionMode: ExecutionMode;
+  onSelectExecutionMode: (mode: ExecutionMode) => void;
 };
 
 export function PromptCard({
@@ -101,6 +111,8 @@ export function PromptCard({
   onSelectModel,
   reasoningEffort,
   onSelectReasoningEffort,
+  executionMode,
+  onSelectExecutionMode,
 }: PromptCardProps) {
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -141,6 +153,7 @@ export function PromptCard({
       <div className="prompt-card-footer">
         <div className="footer-left-controls">
           <PillDropdown
+            header="人格选择"
             label={activeSoulName}
             items={soulItems}
             selectedKey={activeSoul}
@@ -148,6 +161,7 @@ export function PromptCard({
             emptyHint="暂无人格"
           />
           <PillDropdown
+            header="模型选择"
             label={selectedModel || "模型"}
             items={modelItems}
             selectedKey={selectedModel}
@@ -155,10 +169,18 @@ export function PromptCard({
             emptyHint="该供应商暂无模型"
           />
           <PillDropdown
+            header="推理强度"
             label={EFFORT_OPTIONS.find((o) => o.key === reasoningEffort)?.label ?? "标准"}
             items={EFFORT_OPTIONS.map((o) => ({ key: o.key, label: o.label }))}
             selectedKey={reasoningEffort}
             onSelect={(key) => onSelectReasoningEffort(key as ReasoningEffort)}
+          />
+          <PillDropdown
+            header="执行权限"
+            label={EXECUTION_MODE_OPTIONS.find((o) => o.key === executionMode)?.label ?? "询问模式"}
+            items={EXECUTION_MODE_OPTIONS.map((o) => ({ key: o.key, label: o.label, description: o.description }))}
+            selectedKey={executionMode}
+            onSelect={(key) => onSelectExecutionMode(key as ExecutionMode)}
           />
         </div>
 

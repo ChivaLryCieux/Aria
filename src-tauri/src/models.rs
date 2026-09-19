@@ -125,6 +125,9 @@ pub struct OrchestrationRequest {
     /// Kernel reasoning effort override for this run.
     #[serde(default)]
     pub reasoning_effort: Option<String>,
+    /// Execution mode: plan | ask | auto (maps to DSH_PERMISSION_MODE).
+    #[serde(default)]
+    pub execution_mode: Option<String>,
 }
 
 /// Event emitted to the frontend during orchestration execution.

@@ -92,6 +92,7 @@ pub async fn execute_orchestration(
         &request.mode,
         request.conversation_id,
         request.reasoning_effort,
+        request.execution_mode,
         project.as_ref().map(|p| (p.id.as_str(), p.name.as_str(), p.default_directory.as_deref())),
         soul.as_deref(),
     )

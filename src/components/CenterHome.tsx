@@ -1,5 +1,5 @@
 import React from "react";
-import { ProviderModel, Project, ReasoningEffort, Soul } from "../types/chat";
+import { ExecutionMode, ProviderModel, Project, ReasoningEffort, Soul } from "../types/chat";
 import { PromptCard } from "./PromptCard";
 
 type CenterHomeProps = {
@@ -17,6 +17,8 @@ type CenterHomeProps = {
   onSelectModel: (m: string) => void;
   reasoningEffort: ReasoningEffort;
   onSelectReasoningEffort: (effort: ReasoningEffort) => void;
+  executionMode: ExecutionMode;
+  onSelectExecutionMode: (mode: ExecutionMode) => void;
 };
 
 export function CenterHome({
@@ -34,6 +36,8 @@ export function CenterHome({
   onSelectModel,
   reasoningEffort,
   onSelectReasoningEffort,
+  executionMode,
+  onSelectExecutionMode,
 }: CenterHomeProps) {
   return (
     <div className="center-home">
@@ -56,6 +60,8 @@ export function CenterHome({
         onSelectModel={onSelectModel}
         reasoningEffort={reasoningEffort}
         onSelectReasoningEffort={onSelectReasoningEffort}
+        executionMode={executionMode}
+        onSelectExecutionMode={onSelectExecutionMode}
       />
     </div>
   );

@@ -101,6 +101,17 @@ function fingerprint(secret) {
   return createHash('sha256').update(String(secret ?? '')).digest('hex').slice(0, 12)
 }
 
+// Atrium execution modes map onto the kernel's DSH_PERMISSION_MODE env knob
+// (sandbox mode + approval policy are derived from it by the base bundle):
+//   plan → read-only        只计划，不改文件
+//   ask  → workspace-write  工作区内可预测修改放行，需审批的操作在无应答器时拒绝
+//   auto → danger-full-access 允许目录内的一切修改
+const EXECUTION_MODE_SANDBOX = {
+  plan: 'read-only',
+  ask: 'workspace-write',
+  auto: 'danger-full-access',
+}
+
 function routeKey(request) {
   return [
     request.provider ?? 'deepseek-official',
@@ -108,6 +119,7 @@ function routeKey(request) {
     request.reasoningEffort ?? 'default',
     fingerprint(request.apiKey),
     request.workspace ?? 'inherit',
+    request.executionMode ?? 'default',
   ].join('|')
 }
 
@@ -120,6 +132,8 @@ async function ensureHarness(request) {
   if (request.apiKey) childEnv.DEEPSEEK_API_KEY = request.apiKey
   if (request.baseUrl) childEnv.DEEPSEEK_BASE_URL = request.baseUrl
   if (args.dshHome) childEnv.DSH_HOME = args.dshHome
+  const sandboxMode = EXECUTION_MODE_SANDBOX[request.executionMode]
+  if (sandboxMode) childEnv.DSH_PERMISSION_MODE = sandboxMode
 
   const workspace = request.workspace ?? WORKSPACE
 

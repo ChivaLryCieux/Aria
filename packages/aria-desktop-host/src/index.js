@@ -1,0 +1,355 @@
+#!/usr/bin/env node
+/**
+ * Atrium // 智役中庭 — Desktop Kernel Bridge
+ *
+ * Drives the real DeepSeek Harness (dsh) runtime through the official
+ * `@deepseek-ai/dsh-sdk-client` and exposes it to the Tauri shell as:
+ *
+ *   GET  /healthz          liveness + kernel availability
+ *   GET  /api/harness/info kernel identity
+ *   POST /v1/turn          one orchestrated agent turn (prompt in, final text out)
+ *   POST /v1/reset         drop conversation → kernel session bindings
+ *   WS   /events           live assistant deltas + kernel telemetry
+ *
+ * The dsh runtime is spawned as a child process (`dsh --profile sdk`) from the
+ * vendored `deepseek-harness/` checkout; this bridge holds one runtime per
+ * (provider, model, reasoning effort, credential) route and one kernel session
+ * per Atrium conversation, so multi-turn context is owned by the kernel itself.
+ */
+
+import { createServer } from 'node:http'
+import { createHash } from 'node:crypto'
+import { existsSync } from 'node:fs'
+import { join, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
+import { WebSocketServer } from 'ws'
+
+// ── CLI arguments ──────────────────────────────────────────────
+
+function parseArgs(argv) {
+  const args = { port: 19387, host: '127.0.0.1', dshRoot: null, patch: [], workspace: null, dshHome: null }
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i]
+    if (a === '--port') args.port = Number(argv[++i])
+    else if (a === '--host') args.host = argv[++i]
+    else if (a === '--dsh-root') args.dshRoot = resolve(argv[++i])
+    else if (a === '--patch') args.patch.push(resolve(argv[++i]))
+    else if (a === '--workspace') args.workspace = resolve(argv[++i])
+    else if (a === '--dsh-home') args.dshHome = resolve(argv[++i])
+  }
+  return args
+}
+
+const args = parseArgs(process.argv.slice(2))
+const DSH_ROOT = args.dshRoot ?? resolve(process.cwd(), 'deepseek-harness')
+const DSH_BIN = join(DSH_ROOT, 'apps', 'cli', 'lib', 'bin.js')
+const SDK_CLIENT_ENTRY = join(DSH_ROOT, 'packages', 'sdk', 'client', 'lib', 'index.js')
+const WORKSPACE = args.workspace ?? process.cwd()
+
+// ── Kernel availability ────────────────────────────────────────
+
+let kernelStatus = 'starting'
+let kernelDetail = 'resolving vendored deepseek-harness runtime'
+let DeepSeekHarness = null
+
+async function loadKernel() {
+  if (!existsSync(DSH_BIN) || !existsSync(SDK_CLIENT_ENTRY)) {
+    kernelStatus = 'missing'
+    kernelDetail = 'deepseek-harness is not built yet — run `pnpm run prepare:kernel`'
+    return false
+  }
+  try {
+    ({ DeepSeekHarness } = await import(pathToFileURL(SDK_CLIENT_ENTRY).href))
+    kernelStatus = 'ready'
+    kernelDetail = 'vendored dsh runtime resolved'
+    return true
+  } catch (error) {
+    kernelStatus = 'error'
+    kernelDetail = `failed to load dsh SDK client: ${error?.message ?? error}`
+    return false
+  }
+}
+
+// ── WebSocket fan-out ──────────────────────────────────────────
+
+const wsClients = new Set()
+
+function broadcast(payload) {
+  const line = JSON.stringify(payload)
+  for (const socket of wsClients) {
+    if (socket.readyState === 1 /* open */) socket.send(line)
+  }
+}
+
+function broadcastStream(conversationId, stageId, content, extra = {}) {
+  if (content === undefined || content === null) return
+  broadcast({ type: 'assistant-stream', conversationId, stageId, content, ...extra })
+}
+
+function broadcastTelemetry(conversationId, stageId, event) {
+  broadcast({ type: 'telemetry', conversationId, stageId, event })
+}
+
+// ── Harness pool + conversation bindings ───────────────────────
+
+// route key: provider|model|effort|credential-fingerprint → DeepSeekHarness
+const harnessPool = new Map()
+// conversationId → { dshSessionId, chain: Promise }
+const conversations = new Map()
+
+function fingerprint(secret) {
+  return createHash('sha256').update(String(secret ?? '')).digest('hex').slice(0, 12)
+}
+
+function routeKey(request) {
+  return [
+    request.provider ?? 'deepseek-official',
+    request.model ?? 'deepseek-flash',
+    request.reasoningEffort ?? 'default',
+    fingerprint(request.apiKey),
+  ].join('|')
+}
+
+async function ensureHarness(request) {
+  const key = routeKey(request)
+  let entry = harnessPool.get(key)
+  if (entry) return entry
+
+  const childEnv = { ...process.env }
+  if (request.apiKey) childEnv.DEEPSEEK_API_KEY = request.apiKey
+  if (request.baseUrl) childEnv.DEEPSEEK_BASE_URL = request.baseUrl
+  if (args.dshHome) childEnv.DSH_HOME = args.dshHome
+
+  const harness = new DeepSeekHarness({
+    profile: 'sdk',
+    dshBin: DSH_BIN,
+    ...(args.patch.length > 0 ? { patches: args.patch } : {}),
+    cwd: WORKSPACE,
+    processCwd: WORKSPACE,
+    env: childEnv,
+    provider: request.provider ?? 'deepseek-official',
+    model: request.model ?? 'deepseek-flash',
+    ...(request.reasoningEffort ? { reasoningEffort: request.reasoningEffort } : {}),
+    initializeTimeoutMs: 30_000,
+  })
+
+  entry = { harness, key }
+  harnessPool.set(key, entry)
+  broadcast({ type: 'kernel-status', status: 'starting', detail: `spawning dsh runtime for ${request.model ?? 'deepseek-flash'}` })
+  await harness.start()
+  broadcast({ type: 'kernel-status', status: 'ready', detail: `dsh runtime ready (${request.model ?? 'deepseek-flash'})` })
+  return entry
+}
+
+function bindConversation(conversationId, dshSessionId) {
+  const record = conversations.get(conversationId) ?? { dshSessionId, chain: Promise.resolve() }
+  record.dshSessionId = dshSessionId
+  conversations.set(conversationId, record)
+}
+
+// ── Session-event translation (kernel → UI stream) ─────────────
+
+function textOfContentBlocks(message) {
+  if (!message || !Array.isArray(message.content)) return ''
+  return message.content
+    .filter((block) => block?.type === 'text' && typeof block.text === 'string')
+    .map((block) => block.text)
+    .join('')
+}
+
+// A run's notification subscription is already scoped to its session tree,
+// so every notification here belongs to (conversationId, stageId).
+function handleNotification(route, notification) {
+  const { conversationId, stageId } = route
+
+  if (notification.method === 'session.event') {
+    const event = notification.params?.event
+
+    if (event?.type === 'assistant/message') {
+      const stream = Array.isArray(event.data?.stream) ? event.data.stream : []
+      let emitted = 0
+      for (const record of stream) {
+        const chunk = record?.chunk
+        if (chunk?.type === 'text-delta' && typeof chunk.text === 'string' && chunk.text.length > 0) {
+          broadcastStream(conversationId, stageId, chunk.text)
+          emitted += chunk.text.length
+        }
+      }
+      // Settlement safety net: if the compacted stream carried no text deltas,
+      // push the assembled message so the UI never shows an empty node.
+      if (emitted === 0) {
+        const text = textOfContentBlocks(event.data?.message)
+        if (text) broadcastStream(conversationId, stageId, text)
+      }
+      broadcastTelemetry(conversationId, stageId, { kind: 'assistant-message', turn: event.data?.turn, step: event.data?.step })
+    } else if (event?.type === 'tool/call') {
+      broadcastTelemetry(conversationId, stageId, { kind: 'tool-call', tool: event.data?.name })
+    } else if (event?.type === 'tool/result') {
+      broadcastTelemetry(conversationId, stageId, { kind: 'tool-result', turn: event.data?.turn })
+    } else if (event?.type === 'user/message') {
+      broadcastTelemetry(conversationId, stageId, { kind: 'user-message' })
+    }
+  } else if (notification.method === 'session.status') {
+    broadcastTelemetry(conversationId, stageId, { kind: 'session-status', status: notification.params?.status })
+  }
+}
+
+// ── Turn execution ─────────────────────────────────────────────
+
+function runTurn(request) {
+  const conversationId = String(request.conversationId ?? 'default')
+  const stageId = request.stageId ?? null
+  const prompt = String(request.prompt ?? '').trim()
+  if (!prompt) return Promise.reject(new Error('turn prompt is empty'))
+
+  const record = conversations.get(conversationId) ?? { dshSessionId: undefined, chain: Promise.resolve() }
+  conversations.set(conversationId, record)
+
+  const execution = record.chain.then(async () => {
+    const entry = await ensureHarness(request)
+    const route = { conversationId, stageId }
+    broadcastTelemetry(conversationId, stageId, { kind: 'turn-start', model: request.model })
+
+    const result = await entry.harness.run(prompt, {
+      ...(record.dshSessionId ? { sessionId: record.dshSessionId } : {}),
+      onNotification: (notification) => handleNotification(route, notification),
+    })
+
+    bindConversation(conversationId, result.sessionId)
+    broadcastTelemetry(conversationId, stageId, { kind: 'turn-complete', sessionId: result.sessionId })
+
+    return {
+      sessionId: result.sessionId,
+      finalResponse: result.finalResponse ?? '',
+      kernelRoute: routeKey(request),
+    }
+  })
+
+  // Keep the chain alive even when a turn fails; the next turn retries.
+  record.chain = execution.catch(() => undefined)
+  return execution
+}
+
+// ── HTTP surface ───────────────────────────────────────────────
+
+function sendJson(res, status, body) {
+  const text = JSON.stringify(body)
+  res.writeHead(status, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  })
+  res.end(text)
+}
+
+async function readBody(req) {
+  const chunks = []
+  for await (const chunk of req) chunks.push(chunk)
+  if (chunks.length === 0) return {}
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString('utf8'))
+  } catch {
+    return {}
+  }
+}
+
+const httpServer = createServer(async (req, res) => {
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    })
+    res.end()
+    return
+  }
+
+  const url = (req.url ?? '').split('?')[0]
+
+  try {
+    if (req.method === 'GET' && (url === '/healthz' || url === '/status')) {
+      sendJson(res, 200, {
+        service: 'Atrium Desktop Kernel Bridge',
+        version: '0.2.0',
+        status: kernelStatus === 'ready' ? 'ready' : 'degraded',
+        kernel: kernelStatus,
+        detail: kernelDetail,
+        dshRoot: DSH_ROOT,
+        dshBin: existsSync(DSH_BIN),
+        port: args.port,
+        pid: process.pid,
+        conversations: conversations.size,
+        runtimes: harnessPool.size,
+      })
+      return
+    }
+
+    if (req.method === 'GET' && url === '/api/harness/info') {
+      sendJson(res, 200, {
+        harness: 'Atrium // 智役中庭',
+        kernel: 'DeepSeek Harness (vendored upstream, SDK stdio runtime)',
+        protocol: 'sdk.v1',
+        server: 'deepseek-harness-sdk-runtime',
+        profile: 'sdk',
+        dshRoot: DSH_ROOT,
+        url: `http://${args.host}:${args.port}`,
+        wsUrl: `ws://${args.host}:${args.port}/events`,
+      })
+      return
+    }
+
+    if (req.method === 'POST' && url === '/v1/turn') {
+      if (kernelStatus !== 'ready') {
+        sendJson(res, 503, { error: `内核不可用: ${kernelDetail}` })
+        return
+      }
+      const request = await readBody(req)
+      const result = await runTurn(request)
+      sendJson(res, 200, result)
+      return
+    }
+
+    if (req.method === 'POST' && url === '/v1/reset') {
+      const { conversationId } = await readBody(req)
+      if (conversationId) conversations.delete(String(conversationId))
+      else conversations.clear()
+      sendJson(res, 200, { ok: true })
+      return
+    }
+
+    sendJson(res, 404, { error: 'not found' })
+  } catch (error) {
+    sendJson(res, 500, { error: error?.message ?? String(error) })
+  }
+})
+
+const wss = new WebSocketServer({ server: httpServer, path: '/events' })
+wss.on('connection', (socket) => {
+  wsClients.add(socket)
+  socket.send(JSON.stringify({ type: 'kernel-status', status: kernelStatus, detail: kernelDetail }))
+  socket.on('close', () => wsClients.delete(socket))
+  socket.on('error', () => wsClients.delete(socket))
+})
+
+// ── Lifecycle ──────────────────────────────────────────────────
+
+async function shutdown() {
+  broadcast({ type: 'kernel-status', status: 'stopping', detail: 'bridge shutting down' })
+  for (const entry of harnessPool.values()) {
+    await entry.harness.close().catch(() => undefined)
+  }
+  httpServer.close()
+  process.exit(0)
+}
+
+process.on('SIGINT', shutdown)
+process.on('SIGTERM', shutdown)
+process.on('message', (message) => {
+  if (message?.type === 'shutdown') void shutdown()
+})
+
+const server = httpServer.listen(args.port, args.host, () => {
+  console.log(`[ARIA_BRIDGE] listening on http://${args.host}:${args.port} (dsh root: ${DSH_ROOT})`)
+  void loadKernel()
+})

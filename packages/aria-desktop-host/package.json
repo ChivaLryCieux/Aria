@@ -1,8 +1,14 @@
-﻿{
+{
   "name": "@aria/desktop-host",
   "version": "0.2.0",
-  "description": "Aria Desktop Host daemon for DSH and Tauri integration",
+  "description": "Atrium desktop kernel bridge: drives the DeepSeek Harness runtime over the SDK and exposes HTTP + WebSocket to the Tauri shell",
   "type": "module",
-  "main": "lib/index.js",
+  "main": "src/index.js",
+  "bin": {
+    "aria-desktop-host": "src/index.js"
+  },
+  "dependencies": {
+    "ws": "^8.21.3"
+  },
   "license": "MIT"
 }

@@ -10,6 +10,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview --host 0.0.0.0",
     "sync:upstream": "node scripts/sync-upstream.mjs",
+    "prepare:kernel": "node scripts/prepare-kernel.mjs",
     "bundle:runtime": "node scripts/bundle-runtime.mjs",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
@@ -21,7 +22,8 @@
   "dependencies": {
     "@tauri-apps/api": "^2.9.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "ws": "^8.21.3"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.9.0",

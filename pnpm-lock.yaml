@@ -42,7 +42,11 @@ importers:
 
   packages/aria-core: {}
 
-  packages/aria-desktop-host: {}
+  packages/aria-desktop-host:
+    dependencies:
+      ws:
+        specifier: ^8.21.3
+        version: 8.21.3
 
   packages/aria-dsh-plugin: {}
 

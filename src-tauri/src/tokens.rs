@@ -20,6 +20,22 @@ pub struct TokenMetrics {
     pub total_completion_tokens: usize,
     pub total_requests: usize,
     pub total_latency_ms: u64,
+    #[serde(default)]
+    pub models: Vec<ModelUsageStats>,
+    #[serde(default)]
+    pub projects: Vec<ProjectUsageStats>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectUsageStats {
+    pub project_id: String,
+    pub project_name: String,
+    pub prompt_tokens: usize,
+    pub completion_tokens: usize,
+    pub request_count: usize,
+    pub total_latency_ms: u64,
+    #[serde(default)]
     pub models: Vec<ModelUsageStats>,
 }
 
@@ -61,6 +77,7 @@ pub fn record_usage(
     prompt_tokens: usize,
     completion_tokens: usize,
     latency_ms: u64,
+    project: Option<(&str, &str)>,
 ) {
     let mut metrics = load_metrics(app);
 
@@ -69,13 +86,51 @@ pub fn record_usage(
     metrics.total_requests += 1;
     metrics.total_latency_ms += latency_ms;
 
-    if let Some(existing) = metrics.models.iter_mut().find(|m| m.model_name == model_name) {
+    accumulate_model(&mut metrics.models, model_name, prompt_tokens, completion_tokens, latency_ms);
+
+    if let Some((project_id, project_name)) = project {
+        let entry = project_entry(&mut metrics.projects, project_id, project_name);
+        entry.prompt_tokens += prompt_tokens;
+        entry.completion_tokens += completion_tokens;
+        entry.request_count += 1;
+        entry.total_latency_ms += latency_ms;
+        accumulate_model(&mut entry.models, model_name, prompt_tokens, completion_tokens, latency_ms);
+    }
+
+    let _ = save_metrics(app, &metrics);
+}
+
+fn project_entry<'a>(
+    projects: &'a mut Vec<ProjectUsageStats>,
+    project_id: &str,
+    project_name: &str,
+) -> &'a mut ProjectUsageStats {
+    if let Some(index) = projects.iter().position(|p| p.project_id == project_id) {
+        return &mut projects[index];
+    }
+    projects.push(ProjectUsageStats {
+        project_id: project_id.to_string(),
+        project_name: project_name.to_string(),
+        ..Default::default()
+    });
+    let last = projects.len() - 1;
+    &mut projects[last]
+}
+
+fn accumulate_model(
+    models: &mut Vec<ModelUsageStats>,
+    model_name: &str,
+    prompt_tokens: usize,
+    completion_tokens: usize,
+    latency_ms: u64,
+) {
+    if let Some(existing) = models.iter_mut().find(|m| m.model_name == model_name) {
         existing.prompt_tokens += prompt_tokens;
         existing.completion_tokens += completion_tokens;
         existing.request_count += 1;
         existing.total_latency_ms += latency_ms;
     } else {
-        metrics.models.push(ModelUsageStats {
+        models.push(ModelUsageStats {
             model_name: model_name.to_string(),
             prompt_tokens,
             completion_tokens,
@@ -83,8 +138,6 @@ pub fn record_usage(
             total_latency_ms: latency_ms,
         });
     }
-
-    let _ = save_metrics(app, &metrics);
 }
 
 /// Fast, high-accuracy BPE & CJK token estimator without external heavy models

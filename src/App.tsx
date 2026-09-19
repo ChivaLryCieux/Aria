@@ -5,6 +5,7 @@ import { TopBar } from "./components/TopBar";
 import { Sidebar, TaskSummary } from "./components/Sidebar";
 import { CenterHome } from "./components/CenterHome";
 import { SettingsView } from "./components/SettingsView";
+import { ProjectDialog } from "./components/ProjectDialog";
 import { createUserMessage } from "./constants/defaults";
 import {
   AiProfile,
@@ -13,6 +14,7 @@ import {
   OrchestrationProgressEvent,
   OrchestrationStage,
   PendingMessage,
+  Project,
   ReasoningEffort,
   SessionSummary,
 } from "./types/chat";
@@ -23,6 +25,9 @@ export function App() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [projectDialog, setProjectDialog] = useState<{ mode: "create" | "edit"; projectId?: string } | null>(null);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [activeProfileId, setActiveProfileId] = useState<string>("");
   const [selectedModel, setSelectedModel] = useState<string>("deepseek-flash");
@@ -104,6 +109,14 @@ export function App() {
 
     invoke<string>("get_default_workspace_path")
       .then(setWorkspacePath)
+      .catch(console.error);
+
+    // Projects (creates the default project and migrates legacy sessions)
+    invoke<Project[]>("list_projects")
+      .then((list) => {
+        setProjects(list);
+        if (list.length > 0) setActiveProjectId(list[0].id);
+      })
       .catch(console.error);
 
     // Initialize DSH daemon client in background
@@ -234,11 +247,22 @@ export function App() {
     }
   };
 
-  // ── Start New Task ───────────────────────────────────────────
-  const handleNewTask = () => {
+  // ── Start New Task (inside the given project) ─────────────────
+  const handleNewTask = (projectId?: string) => {
+    if (projectId) setActiveProjectId(projectId);
     setActiveSessionId(null);
     setMessages([]);
     setDraft("");
+  };
+
+  // ── Project dialog save ──────────────────────────────────────
+  const handleProjectSaved = (saved: Project) => {
+    invoke<Project[]>("list_projects")
+      .then((list) => {
+        setProjects(list);
+        setActiveProjectId(saved.id);
+      })
+      .catch(console.error);
   };
 
   // ── Select Existing Session ──────────────────────────────────
@@ -272,11 +296,18 @@ export function App() {
     }
   };
 
-  // ── Open Workspace Directory ─────────────────────────────────
+  // ── Open Workspace Directory (active project's default directory) ──
+  const activeProject = useMemo(
+    () => projects.find((p) => p.id === activeProjectId) ?? null,
+    [projects, activeProjectId]
+  );
+
+  const openDirectory = activeProject?.defaultDirectory || workspacePath;
+
   const handleOpenWorkspace = async () => {
-    if (!workspacePath) return;
+    if (!openDirectory) return;
     try {
-      await invoke("open_path_in_explorer", { path: workspacePath });
+      await invoke("open_path_in_explorer", { path: openDirectory });
     } catch (err) {
       console.error("Failed to open path:", err);
     }
@@ -301,7 +332,10 @@ export function App() {
     if (!curSessionId) {
       try {
         const title = draft.trim().slice(0, 20);
-        const created = await invoke<SessionSummary>("create_session", { title });
+        const created = await invoke<SessionSummary>("create_session", {
+          title,
+          projectId: activeProjectId,
+        });
         curSessionId = created.id;
         setActiveSessionId(curSessionId);
         setSessions((prev) => [created, ...prev.filter((s) => s.id !== created.id)]);
@@ -403,6 +437,7 @@ export function App() {
       id: s.id,
       title: s.title,
       timestamp: s.updatedAt,
+      projectId: s.projectId,
     }));
   }, [sessions]);
 
@@ -422,30 +457,24 @@ export function App() {
   }, []);
 
   const workspaceName = useMemo(() => {
-    if (!workspacePath) return "Atrium";
-    const parts = workspacePath.replace(/\\/g, "/").split("/");
+    const dir = openDirectory;
+    if (!dir) return "Atrium";
+    const parts = dir.replace(/\\/g, "/").split("/");
     return parts[parts.length - 1] || "Atrium";
-  }, [workspacePath]);
+  }, [openDirectory]);
 
   return (
     <div className="app-container">
       {/* 1:1 Top Bar */}
       <TopBar
+        sidebarCollapsed={isSidebarCollapsed}
+        onToggleSidebar={() => setIsSidebarCollapsed((prev) => !prev)}
         kernelStatus={kernelStatus}
         onNewTerminal={() => {
           setCurrentView("workspace");
           handleNewTask();
         }}
         onOpenHelp={() => setIsHelpOpen(true)}
-        canGoBack={messages.length > 0 || currentView === "settings"}
-        canGoForward={false}
-        onGoBack={() => {
-          if (currentView === "settings") {
-            setCurrentView("workspace");
-          } else {
-            handleNewTask();
-          }
-        }}
       />
 
       {currentView === "settings" && settings ? (
@@ -460,19 +489,21 @@ export function App() {
       ) : (
         /* Main Workspace Body */
         <div className="workspace-body">
-          {/* 1:1 Left Sidebar */}
+          {/* 1:1 Left Sidebar: project tree */}
           <Sidebar
             userName={settings?.userName || "Tempsyche"}
             isCollapsed={isSidebarCollapsed}
-            onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
-            onNewTask={handleNewTask}
             onOpenSettings={() => setCurrentView("settings")}
+            projects={projects}
             tasks={sidebarTasks}
             activeTaskId={activeSessionId || undefined}
+            activeProjectId={activeProjectId}
+            onSelectProject={setActiveProjectId}
+            onNewProject={() => setProjectDialog({ mode: "create" })}
+            onNewTask={(projectId) => handleNewTask(projectId)}
+            onOpenProjectSettings={(projectId) => setProjectDialog({ mode: "edit", projectId })}
             onSelectTask={handleSelectSession}
             onDeleteTask={handleDeleteSession}
-            workspaceName={workspaceName}
-            onOpenWorkspace={handleOpenWorkspace}
           />
 
           {/* Center Stage Canvas */}
@@ -555,6 +586,21 @@ export function App() {
             )}
           </main>
         </div>
+      )}
+
+      {/* Project create / settings dialog */}
+      {projectDialog && (
+        <ProjectDialog
+          mode={projectDialog.mode}
+          project={
+            projectDialog.mode === "edit"
+              ? projects.find((p) => p.id === projectDialog.projectId) ?? null
+              : null
+          }
+          fallbackDirectory={workspacePath}
+          onClose={() => setProjectDialog(null)}
+          onSaved={handleProjectSaved}
+        />
       )}
 
       {/* Help / Shortcuts Modal */}

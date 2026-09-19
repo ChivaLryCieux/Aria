@@ -107,6 +107,7 @@ function routeKey(request) {
     request.model ?? 'deepseek-flash',
     request.reasoningEffort ?? 'default',
     fingerprint(request.apiKey),
+    request.workspace ?? 'inherit',
   ].join('|')
 }
 
@@ -120,12 +121,14 @@ async function ensureHarness(request) {
   if (request.baseUrl) childEnv.DEEPSEEK_BASE_URL = request.baseUrl
   if (args.dshHome) childEnv.DSH_HOME = args.dshHome
 
+  const workspace = request.workspace ?? WORKSPACE
+
   const harness = new DeepSeekHarness({
     profile: 'sdk',
     dshBin: DSH_BIN,
     ...(args.patch.length > 0 ? { patches: args.patch } : {}),
-    cwd: WORKSPACE,
-    processCwd: WORKSPACE,
+    cwd: workspace,
+    processCwd: workspace,
     env: childEnv,
     provider: request.provider ?? 'deepseek-official',
     model: request.model ?? 'deepseek-flash',
@@ -146,7 +149,6 @@ function bindConversation(conversationId, dshSessionId) {
   record.dshSessionId = dshSessionId
   conversations.set(conversationId, record)
 }
-
 // ── Session-event translation (kernel → UI stream) ─────────────
 
 function textOfContentBlocks(message) {
@@ -158,14 +160,23 @@ function textOfContentBlocks(message) {
 }
 
 // A run's notification subscription is already scoped to its session tree,
-// so every notification here belongs to (conversationId, stageId).
-function handleNotification(route, notification) {
+// so every notification here belongs to (conversationId, stageId). The last
+// assistant usage seen during the run is collected into `state.usage`.
+function handleNotification(route, notification, state) {
   const { conversationId, stageId } = route
 
   if (notification.method === 'session.event') {
     const event = notification.params?.event
 
     if (event?.type === 'assistant/message') {
+      const usage = event.data?.usage
+      if (usage && typeof usage === 'object') {
+        state.usage = {
+          inputTokens: Number(usage.inputTokens ?? 0),
+          outputTokens: Number(usage.outputTokens ?? 0),
+          ...(usage.totalTokens === undefined ? {} : { totalTokens: Number(usage.totalTokens) }),
+        }
+      }
       const stream = Array.isArray(event.data?.stream) ? event.data.stream : []
       let emitted = 0
       for (const record of stream) {
@@ -202,17 +213,25 @@ function runTurn(request) {
   const prompt = String(request.prompt ?? '').trim()
   if (!prompt) return Promise.reject(new Error('turn prompt is empty'))
 
-  const record = conversations.get(conversationId) ?? { dshSessionId: undefined, chain: Promise.resolve() }
+  const route = routeKey(request)
+  const record = conversations.get(conversationId) ?? { dshSessionId: undefined, routeKey: route, chain: Promise.resolve() }
+  if (record.routeKey !== route) {
+    // The runtime route changed (model / credential / workspace): the old
+    // kernel session lives in another process and cannot continue here.
+    record.dshSessionId = undefined
+    record.routeKey = route
+  }
   conversations.set(conversationId, record)
 
   const execution = record.chain.then(async () => {
     const entry = await ensureHarness(request)
     const route = { conversationId, stageId }
+    const state = { usage: null }
     broadcastTelemetry(conversationId, stageId, { kind: 'turn-start', model: request.model })
 
     const result = await entry.harness.run(prompt, {
       ...(record.dshSessionId ? { sessionId: record.dshSessionId } : {}),
-      onNotification: (notification) => handleNotification(route, notification),
+      onNotification: (notification) => handleNotification(route, notification, state),
     })
 
     bindConversation(conversationId, result.sessionId)
@@ -221,6 +240,7 @@ function runTurn(request) {
     return {
       sessionId: result.sessionId,
       finalResponse: result.finalResponse ?? '',
+      ...(state.usage ? { usage: state.usage } : {}),
       kernelRoute: routeKey(request),
     }
   })

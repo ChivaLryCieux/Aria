@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { AppSettings, AiProfile, ProviderModel, TokenMetrics } from "../types/chat";
+import { AppDialog, AppDialogRequest } from "./AppDialog";
 
 type SettingsTab = "general" | "appearance" | "model" | "tokens";
 
@@ -29,6 +30,26 @@ export function SettingsView({
     settings.aiProfiles[0]?.id || ""
   );
   const [tokenMetrics, setTokenMetrics] = useState<TokenMetrics | null>(null);
+  const [dialog, setDialog] = useState<AppDialogRequest | null>(null);
+
+  const showConfirm = (
+    message: string,
+    onConfirm: () => void,
+    options: { tone?: "default" | "danger"; title?: string; confirmText?: string } = {}
+  ) => {
+    setDialog({
+      kind: "confirm",
+      title: options.title ?? (options.tone === "danger" ? "危险操作" : "确认操作"),
+      message,
+      tone: options.tone ?? "danger",
+      confirmText: options.confirmText,
+      onConfirm,
+    });
+  };
+
+  const showAlert = (message: string, tone: "default" | "danger" = "default") => {
+    setDialog({ kind: "alert", title: "提示", message, tone });
+  };
 
   const themeMode = settings.themeMode ?? "light";
   const fontSize = settings.fontSize ?? "14px";
@@ -88,16 +109,19 @@ export function SettingsView({
 
   const handleDeleteProvider = async () => {
     if (!currentProfile) return;
-    if (!confirm(`确定要删除供应商「${currentProfile.name}」吗？`)) return;
-    try {
-      const next = await invoke<AppSettings>("delete_profile", {
-        profileId: currentProfile.id,
-      });
-      onSaveSettings(next);
-      setActiveProfileId(next.aiProfiles[0]?.id || "");
-    } catch (err) {
-      console.error("删除供应商失败:", err);
-    }
+    const label = currentProfile.name.trim() || `供应商${profileIndex < 0 ? 1 : profileIndex + 1}`;
+    showConfirm(`确定要删除供应商「${label}」吗？删除后不可恢复。`, async () => {
+      try {
+        const next = await invoke<AppSettings>("delete_profile", {
+          profileId: currentProfile.id,
+        });
+        onSaveSettings(next);
+        setActiveProfileId(next.aiProfiles[0]?.id || "");
+      } catch (err) {
+        console.error("删除供应商失败:", err);
+        showAlert(`删除供应商失败：${String(err)}`, "danger");
+      }
+    });
   };
 
   const handleProbeProvider = async () => {
@@ -107,9 +131,9 @@ export function SettingsView({
         endpoint: currentProfile.endpoint,
         apiKey: currentProfile.apiKey,
       });
-      alert(`通道自检通过：${message}`);
+      showAlert(`通道自检通过：${message}`);
     } catch (err) {
-      alert(`通道自检失败：${String(err)}`);
+      showAlert(`通道自检失败：${String(err)}`, "danger");
     }
   };
 
@@ -311,11 +335,9 @@ export function SettingsView({
                   <button
                     type="button"
                     className="zcode-btn-danger"
-                    onClick={() => {
-                      if (confirm("确定要清空全部会话与运行历史记录吗？此操作不可逆。")) {
-                        onClearHistory();
-                      }
-                    }}
+                    onClick={() =>
+                      showConfirm("确定要清空全部会话与运行历史记录吗？此操作不可逆。", () => onClearHistory())
+                    }
                   >
                     清空运行缓存与记录
                   </button>
@@ -675,6 +697,9 @@ export function SettingsView({
           </div>
         )}
       </main>
+
+      {/* In-app centered dialog (replaces native confirm/alert) */}
+      {dialog && <AppDialog request={dialog} onClose={() => setDialog(null)} />}
     </div>
   );
 }

@@ -122,6 +122,7 @@ pub async fn execute(
     mode: &str,
     conversation_id: Option<String>,
     reasoning_effort: Option<String>,
+    project: Option<(&str, &str, Option<&str>)>,
 ) -> Vec<ChatMessage> {
     let kernel_ready = {
         let mut guard = daemon.lock().await;
@@ -136,14 +137,14 @@ pub async fn execute(
     if kernel_ready {
         let conversation = conversation_id.unwrap_or_else(|| format!("adhoc-{}", Uuid::new_v4()));
         if mode == "parallel" {
-            execute_parallel_kernel(kernel_http, profiles, base_messages, &conversation, reasoning_effort).await
+            execute_parallel_kernel(kernel_http, profiles, base_messages, &conversation, reasoning_effort, project).await
         } else {
-            execute_dag_kernel(app, kernel_http, profiles, base_messages, &conversation, reasoning_effort).await
+            execute_dag_kernel(app, kernel_http, profiles, base_messages, &conversation, reasoning_effort, project).await
         }
     } else if mode == "parallel" {
-        execute_parallel(http, profiles, base_messages).await
+        execute_parallel(http, profiles, base_messages, project).await
     } else {
-        execute_dag(app, http, profiles, base_messages).await
+        execute_dag(app, http, profiles, base_messages, project).await
     }
 }
 
@@ -159,6 +160,9 @@ struct KernelTurnRequest {
     api_key: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     reasoning_effort: Option<String>,
+    /// Kernel process cwd for this turn (the project's default directory).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    workspace: Option<String>,
     prompt: String,
 }
 
@@ -170,6 +174,10 @@ struct KernelTurnResponse {
     session_id: String,
     #[serde(default)]
     final_response: String,
+    #[serde(default)]
+    input_tokens: Option<u64>,
+    #[serde(default)]
+    output_tokens: Option<u64>,
 }
 
 async fn post_turn(
@@ -246,10 +254,12 @@ async fn execute_dag_kernel(
     base_messages: &[ChatMessage],
     conversation: &str,
     reasoning_effort: Option<String>,
+    project: Option<(&str, &str, Option<&str>)>,
 ) -> Vec<ChatMessage> {
     let stages = build_stages(profiles);
     let daemon_url = "http://127.0.0.1:19387";
     let user_input = latest_user_input(base_messages);
+    let workspace = project.and_then(|(_, _, dir)| dir.map(str::to_string));
     let mut completed_replies: Vec<ChatMessage> = Vec::new();
 
     for (index, stage) in stages.iter().enumerate() {
@@ -272,11 +282,16 @@ async fn execute_dag_kernel(
             model: stage.profile.model.clone(),
             api_key: stage.profile.api_key.clone(),
             reasoning_effort: reasoning_effort.clone(),
+            workspace: workspace.clone(),
             prompt: kernel_stage_prompt(stage, index, &user_input),
         };
 
+        let start_time = std::time::Instant::now();
         match post_turn(http, daemon_url, &request, std::time::Duration::from_secs(600)).await {
             Ok(turn) => {
+                let latency = start_time.elapsed().as_millis() as u64;
+                record_turn_usage(app, stage.profile.model.trim(), &request.prompt, &turn, latency, project);
+
                 let reply = ChatMessage {
                     id: stage_message_id(stage),
                     role: "assistant".to_string(),
@@ -333,15 +348,39 @@ async fn execute_dag_kernel(
     completed_replies
 }
 
+/// Feed one settled kernel turn into the token meter. Kernel-reported usage
+/// wins; absent numbers fall back to the local estimator.
+fn record_turn_usage(
+    app: &AppHandle,
+    model: &str,
+    prompt: &str,
+    turn: &KernelTurnResponse,
+    latency_ms: u64,
+    project: Option<(&str, &str, Option<&str>)>,
+) {
+    let prompt_tokens = turn
+        .input_tokens
+        .map(|n| n as usize)
+        .unwrap_or_else(|| crate::tokens::estimate_tokens(prompt));
+    let completion_tokens = turn
+        .output_tokens
+        .map(|n| n as usize)
+        .unwrap_or_else(|| crate::tokens::estimate_tokens(&turn.final_response));
+    let project_ctx = project.map(|(id, name, _)| (id, name));
+    crate::tokens::record_usage(app, model, prompt_tokens, completion_tokens, latency_ms, project_ctx);
+}
+
 async fn execute_parallel_kernel(
     http: &Client,
     profiles: &[AiProfile],
     base_messages: &[ChatMessage],
     conversation: &str,
     reasoning_effort: Option<String>,
+    project: Option<(&str, &str, Option<&str>)>,
 ) -> Vec<ChatMessage> {
     let daemon_url = "http://127.0.0.1:19387";
     let user_input = latest_user_input(base_messages);
+    let workspace = project.and_then(|(_, _, dir)| dir.map(str::to_string));
 
     let futures = profiles.iter().enumerate().map(|(index, profile)| {
         let conversation = format!("{conversation}::parallel-{index}");
@@ -357,6 +396,7 @@ async fn execute_parallel_kernel(
             model: profile.model.clone(),
             api_key: profile.api_key.clone(),
             reasoning_effort: reasoning_effort.clone(),
+            workspace: workspace.clone(),
             prompt,
         };
         async move {
@@ -397,6 +437,7 @@ async fn execute_dag(
     http: &Client,
     profiles: &[AiProfile],
     base_messages: &[ChatMessage],
+    project: Option<(&str, &str, Option<&str>)>,
 ) -> Vec<ChatMessage> {
     let stages = build_stages(profiles);
     let mut completed_replies: Vec<ChatMessage> = Vec::new();
@@ -441,7 +482,14 @@ async fn execute_dag(
         match result {
             Ok(response) => {
                 let completion_tokens = crate::tokens::estimate_tokens(&response.content);
-                crate::tokens::record_usage(app, &stage.profile.model, prompt_tokens, completion_tokens, latency);
+                crate::tokens::record_usage(
+                    app,
+                    &stage.profile.model,
+                    prompt_tokens,
+                    completion_tokens,
+                    latency,
+                    project.map(|(id, name, _)| (id, name)),
+                );
 
                 let reply = ChatMessage {
                     id: message_id,
@@ -502,6 +550,7 @@ async fn execute_parallel(
     http: &Client,
     profiles: &[AiProfile],
     base_messages: &[ChatMessage],
+    _project: Option<(&str, &str, Option<&str>)>,
 ) -> Vec<ChatMessage> {
     let api_messages_per_profile: Vec<_> = profiles
         .iter()

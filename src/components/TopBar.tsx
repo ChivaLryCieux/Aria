@@ -2,13 +2,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { KernelStatusEvent } from "../services/dshClient";
 
 type TopBarProps = {
+  sidebarCollapsed?: boolean;
+  onToggleSidebar?: () => void;
   kernelStatus?: KernelStatusEvent | null;
   onNewTerminal?: () => void;
   onOpenHelp?: () => void;
-  canGoBack?: boolean;
-  canGoForward?: boolean;
-  onGoBack?: () => void;
-  onGoForward?: () => void;
 };
 
 const KERNEL_STATUS_META: Record<string, { color: string; label: string }> = {
@@ -20,13 +18,11 @@ const KERNEL_STATUS_META: Record<string, { color: string; label: string }> = {
 };
 
 export function TopBar({
+  sidebarCollapsed,
+  onToggleSidebar,
   kernelStatus,
   onNewTerminal,
   onOpenHelp,
-  canGoBack = false,
-  canGoForward = false,
-  onGoBack,
-  onGoForward,
 }: TopBarProps) {
   const handleMinimize = async () => {
     try {
@@ -54,36 +50,23 @@ export function TopBar({
 
   return (
     <header className="top-bar" data-tauri-drag-region>
-      {/* Left: App Logo & Navigation Arrows */}
+      {/* Left: Sidebar Toggle, App Logo */}
       <div className="top-bar-left">
         <div className="app-logo-badge" title="Atrium // 智役中庭">
           <img src="/logo.png" alt="Atrium" className="app-logo-icon" />
         </div>
 
-        <div className="history-nav">
-          <button
-            type="button"
-            className="nav-btn"
-            disabled={!canGoBack}
-            onClick={onGoBack}
-            title="后退"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            className="nav-btn"
-            disabled={!canGoForward}
-            onClick={onGoForward}
-            title="前进"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
-        </div>
+        <button
+          type="button"
+          className="icon-btn sidebar-toggle-btn"
+          title={sidebarCollapsed ? "展开侧边栏" : "折叠侧边栏"}
+          onClick={onToggleSidebar}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+            <line x1="9" y1="3" x2="9" y2="21" />
+          </svg>
+        </button>
       </div>
 
       {/* Center Draggable Spacer */}

@@ -82,6 +82,7 @@ export type TokenMetrics = {
   totalRequests: number;
   totalLatencyMs: number;
   models: ModelUsageStats[];
+  projects: ProjectUsageStats[];
 };
 
 export type SessionSummary = {
@@ -89,5 +90,25 @@ export type SessionSummary = {
   title: string;
   updatedAt: number;
   messageCount: number;
+  projectId?: string | null;
+};
+
+export type Project = {
+  id: string;
+  name: string;
+  description: string;
+  directories: string[];
+  defaultDirectory?: string | null;
+  createdAt: number;
+};
+
+export type ProjectUsageStats = {
+  projectId: string;
+  projectName: string;
+  promptTokens: number;
+  completionTokens: number;
+  requestCount: number;
+  totalLatencyMs: number;
+  models: ModelUsageStats[];
 };
 

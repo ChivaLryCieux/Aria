@@ -3,10 +3,11 @@ use std::{fs, path::PathBuf};
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
-use crate::models::{AiProfile, AppSettings, ChatMessage, ProviderModel};
+use crate::models::{AiProfile, AppSettings, ChatMessage, Project, ProviderModel};
 
 const SETTINGS_FILE: &str = "settings.json";
 const HISTORY_FILE: &str = "chat_history.json";
+const PROJECTS_FILE: &str = "projects.json";
 
 /// Kernel-aligned seed catalog for profiles that carry no model list yet.
 fn seed_models(default: Option<&str>) -> Vec<ProviderModel> {
@@ -192,6 +193,9 @@ pub struct SessionSummary {
     pub title: String,
     pub updated_at: u64,
     pub message_count: usize,
+    /// Owning project; legacy sessions are migrated to the default project.
+    #[serde(default)]
+    pub project_id: Option<String>,
 }
 
 fn sessions_dir(app: &AppHandle) -> Result<PathBuf, String> {
@@ -220,6 +224,14 @@ pub fn save_session_index(app: &AppHandle, sessions: &[SessionSummary]) -> Resul
 }
 
 pub fn create_session(app: &AppHandle, title: &str) -> Result<SessionSummary, String> {
+    create_session_in_project(app, title, None)
+}
+
+pub fn create_session_in_project(
+    app: &AppHandle,
+    title: &str,
+    project_id: Option<&str>,
+) -> Result<SessionSummary, String> {
     let mut sessions = list_sessions(app).unwrap_or_default();
     let id = Uuid::new_v4().to_string();
     let now = std::time::SystemTime::now()
@@ -232,6 +244,7 @@ pub fn create_session(app: &AppHandle, title: &str) -> Result<SessionSummary, St
         title: if title.trim().is_empty() { "新任务".to_string() } else { title.trim().to_string() },
         updated_at: now,
         message_count: 0,
+        project_id: project_id.map(str::to_string),
     };
 
     sessions.insert(0, summary.clone());
@@ -239,6 +252,14 @@ pub fn create_session(app: &AppHandle, title: &str) -> Result<SessionSummary, St
     save_session_messages(app, &id, &[])?;
 
     Ok(summary)
+}
+
+/// Look up one session summary by id (used to resolve the owning project).
+pub fn find_session(app: &AppHandle, session_id: &str) -> Option<SessionSummary> {
+    list_sessions(app)
+        .ok()?
+        .into_iter()
+        .find(|s| s.id == session_id)
 }
 
 pub fn load_session_messages(app: &AppHandle, session_id: &str) -> Result<Vec<ChatMessage>, String> {
@@ -314,4 +335,133 @@ pub fn delete_profile(app: &AppHandle, profile_id: &str) -> Result<AppSettings, 
     }
     save_settings(app, &settings)?;
     Ok(settings)
+}
+
+// ─── Projects ──────────────────────────────────────────────────
+
+fn projects_path(app: &AppHandle) -> Result<PathBuf, String> {
+    Ok(config_dir(app)?.join(PROJECTS_FILE))
+}
+
+fn now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+pub fn load_projects(app: &AppHandle) -> Result<Vec<Project>, String> {
+    let path = projects_path(app)?;
+    if !path.exists() {
+        return Ok(Vec::new());
+    }
+    let text = fs::read_to_string(&path).map_err(|e| format!("无法读取项目列表: {e}"))?;
+    serde_json::from_str(&text).map_err(|e| format!("项目列表格式无效: {e}"))
+}
+
+fn save_projects(app: &AppHandle, projects: &[Project]) -> Result<(), String> {
+    let path = projects_path(app)?;
+    let text = serde_json::to_string_pretty(projects).map_err(|e| format!("序列化项目失败: {e}"))?;
+    fs::write(path, text).map_err(|e| format!("保存项目失败: {e}"))
+}
+
+/// Guarantee at least one project exists and every session belongs to one.
+/// Legacy sessions (no project) are migrated into the default project.
+pub fn ensure_projects(app: &AppHandle) -> Result<Vec<Project>, String> {
+    let mut projects = load_projects(app)?;
+    if projects.is_empty() {
+        let fallback_dir = config_dir(app)?.to_string_lossy().to_string();
+        let default_project = Project {
+            id: Uuid::new_v4().to_string(),
+            name: "默认项目".to_string(),
+            description: "自动创建的默认工作项目".to_string(),
+            directories: vec![fallback_dir.clone()],
+            default_directory: Some(fallback_dir),
+            created_at: now_secs(),
+        };
+        projects.push(default_project);
+        save_projects(app, &projects)?;
+    }
+
+    let default_id = projects[0].id.clone();
+    let mut sessions = list_sessions(app).unwrap_or_default();
+    let migrated = sessions
+        .iter_mut()
+        .filter(|s| s.project_id.is_none())
+        .map(|s| {
+            s.project_id = Some(default_id.clone());
+        })
+        .count();
+    if migrated > 0 {
+        save_session_index(app, &sessions)?;
+    }
+
+    Ok(projects)
+}
+
+pub fn create_project(
+    app: &AppHandle,
+    name: &str,
+    description: &str,
+    directories: Vec<String>,
+    default_directory: Option<String>,
+) -> Result<Project, String> {
+    let mut projects = load_projects(app)?;
+    let fallback_dir = config_dir(app)?.to_string_lossy().to_string();
+
+    let mut directories = directories
+        .into_iter()
+        .map(|d| d.trim().to_string())
+        .filter(|d| !d.is_empty())
+        .collect::<Vec<_>>();
+    if directories.is_empty() {
+        directories.push(fallback_dir);
+    }
+
+    let default_directory = default_directory
+        .filter(|d| directories.iter().any(|x| x == d))
+        .or_else(|| directories.first().cloned());
+
+    let project = Project {
+        id: Uuid::new_v4().to_string(),
+        name: if name.trim().is_empty() { format!("项目{}", projects.len() + 1) } else { name.trim().to_string() },
+        description: description.trim().to_string(),
+        directories,
+        default_directory,
+        created_at: now_secs(),
+    };
+    projects.push(project.clone());
+    save_projects(app, &projects)?;
+    Ok(project)
+}
+
+pub fn update_project(app: &AppHandle, project: Project) -> Result<Project, String> {
+    let mut projects = load_projects(app)?;
+    let Some(entry) = projects.iter_mut().find(|p| p.id == project.id) else {
+        return Err(format!("项目不存在: {}", project.id));
+    };
+    *entry = project.clone();
+    save_projects(app, &projects)?;
+    Ok(project)
+}
+
+/// Trim and validate a project coming from the frontend before persisting.
+pub fn normalize_project(mut project: Project) -> Project {
+    project.name = project.name.trim().to_string();
+    project.description = project.description.trim().to_string();
+
+    let mut seen = std::collections::HashSet::new();
+    project.directories = project
+        .directories
+        .iter()
+        .map(|d| d.trim().to_string())
+        .filter(|d| !d.is_empty() && seen.insert(d.clone()))
+        .collect();
+
+    project.default_directory = project
+        .default_directory
+        .take()
+        .filter(|d| project.directories.iter().any(|x| x == d))
+        .or_else(|| project.directories.first().cloned());
+    project
 }

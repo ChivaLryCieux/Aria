@@ -1608,3 +1608,207 @@ button, input, textarea, select, [role="button"], a {
   border-top: 1px solid var(--border-subtle);
   margin-top: 4px;
 }
+
+/* ─── In-app dialog (confirm / alert) ──────────────────────── */
+.dialog-narrow {
+  width: 420px;
+  max-width: 86vw;
+}
+
+.dialog-message {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+}
+
+.btn-danger {
+  padding: 6px 16px;
+  background: var(--accent-danger);
+  border: 1px solid var(--accent-danger);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: #ffffff;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-danger:hover {
+  opacity: 0.88;
+}
+
+/* ─── Sidebar project tree ─────────────────────────────────── */
+.project-node {
+  position: relative;
+}
+
+.project-node-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-secondary);
+  transition: background 0.15s;
+  user-select: none;
+}
+
+.project-node-row:hover {
+  background: var(--bg-sidebar-hover);
+}
+
+.project-node-row.active {
+  background: var(--bg-sidebar-active);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.project-chevron {
+  display: flex;
+  align-items: center;
+  width: 12px;
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.project-folder-icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.project-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.project-node-actions {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.12s;
+  background: inherit;
+}
+
+.project-node:hover .project-node-actions {
+  opacity: 1;
+}
+
+.project-node:hover .project-node-row {
+  padding-right: 64px;
+}
+
+.project-node-actions .icon-btn {
+  width: 22px;
+  height: 22px;
+  border-radius: var(--radius-xs);
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.project-tasks {
+  margin: 2px 0 4px 18px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border-default);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.task-item.nested {
+  padding: 6px 8px;
+  font-size: 12.5px;
+}
+
+/* ─── Project dialog ───────────────────────────────────────── */
+.project-dialog {
+  width: 520px;
+}
+
+.directory-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.directory-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.directory-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-pill);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.directory-row.default {
+  border-color: var(--border-strong);
+}
+
+.directory-path {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.directory-default-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: var(--radius-xs);
+  background: var(--accent-black);
+  color: var(--accent-on-black, #fff);
+  flex-shrink: 0;
+}
+
+.project-stats-section {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.stats-metric-grid.compact {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.stats-metric-grid.compact .metric-card {
+  padding: 10px;
+}
+
+.stats-metric-grid.compact .metric-value {
+  font-size: 15px;
+}
+
+/* ─── TopBar sidebar toggle ────────────────────────────────── */
+.sidebar-toggle-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+}

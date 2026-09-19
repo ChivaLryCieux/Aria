@@ -1,5 +1,22 @@
 use serde::{Deserialize, Serialize};
 
+// ─── Project ───────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Project {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: String,
+    #[serde(default)]
+    pub directories: Vec<String>,
+    #[serde(default)]
+    pub default_directory: Option<String>,
+    #[serde(default)]
+    pub created_at: u64,
+}
+
 // ─── AI Profile ────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

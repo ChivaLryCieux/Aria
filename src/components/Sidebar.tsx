@@ -1,116 +1,209 @@
+import { useState } from "react";
+import { Project } from "../types/chat";
+
 export type TaskSummary = {
   id: string;
   title: string;
   timestamp?: number;
+  projectId?: string | null;
 };
 
 type SidebarProps = {
   userName: string;
   isCollapsed: boolean;
-  onToggleCollapse: () => void;
-  onNewTask: () => void;
   onOpenSettings: () => void;
-  tasks?: TaskSummary[];
+  projects: Project[];
+  tasks: TaskSummary[];
   activeTaskId?: string;
-  onSelectTask?: (id: string) => void;
-  onDeleteTask?: (id: string) => void;
-  workspaceName?: string;
-  onOpenWorkspace?: () => void;
+  activeProjectId?: string | null;
+  onSelectProject: (id: string) => void;
+  onNewProject: () => void;
+  onNewTask: (projectId: string) => void;
+  onOpenProjectSettings: (projectId: string) => void;
+  onSelectTask: (id: string) => void;
+  onDeleteTask: (id: string) => void;
 };
 
 export function Sidebar({
   userName = "Tempsyche",
   isCollapsed,
-  onToggleCollapse,
-  onNewTask,
   onOpenSettings,
-  tasks = [],
+  projects,
+  tasks,
   activeTaskId,
+  activeProjectId,
+  onSelectProject,
+  onNewProject,
+  onNewTask,
+  onOpenProjectSettings,
   onSelectTask,
   onDeleteTask,
-  workspaceName,
-  onOpenWorkspace,
 }: SidebarProps) {
   const avatarInitial = (userName || "T").trim().charAt(0).toUpperCase();
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
+
+  const toggleExpanded = (projectId: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(projectId)) next.delete(projectId);
+      else next.add(projectId);
+      return next;
+    });
+  };
+
+  const unassignedTasks = tasks.filter((t) => !t.projectId || !projects.some((p) => p.id === t.projectId));
 
   return (
     <aside className={`sidebar ${isCollapsed ? "collapsed" : ""}`}>
-      {/* Top Action: Only New Task & Project List */}
+      {/* Top Actions: Settings above New Project */}
       <div className="sidebar-top-actions">
-        {/* 新建任务 */}
-        <button
-          type="button"
-          className="action-row"
-          onClick={onNewTask}
-          title="新建任务 (Ctrl+N)"
-        >
+        <button type="button" className="action-row" onClick={onOpenSettings} title="设置">
           <div className="action-left">
             <span className="action-icon">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <rect x="3" y="3" width="18" height="18" rx="4" />
-                <line x1="12" y1="8" x2="12" y2="16" />
-                <line x1="8" y1="12" x2="16" y2="12" />
+                <circle cx="12" cy="12" r="3" />
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
               </svg>
             </span>
-            <span>新建任务</span>
+            <span>设置</span>
           </div>
-          <span className="shortcut-badge">Ctrl+N</span>
         </button>
 
-        {/* 项目列表 */}
-        <button
-          type="button"
-          className="action-row active"
-          onClick={onOpenWorkspace}
-          title="项目列表"
-        >
+        <button type="button" className="action-row" onClick={onNewProject} title="新建项目">
           <div className="action-left">
             <span className="action-icon">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                <line x1="12" y1="11" x2="12" y2="17" />
+                <line x1="9" y1="14" x2="15" y2="14" />
               </svg>
             </span>
-            <span>项目列表</span>
+            <span>新建项目</span>
           </div>
         </button>
       </div>
 
-      {/* Project & Task Section List */}
+      {/* Project Tree: static label + expandable folders */}
       <div className="sidebar-list-content">
-        {/* Active Project */}
-        <div className="list-section-header">项目</div>
-        {workspaceName ? (
-          <div className="task-item active" onClick={onOpenWorkspace} title={workspaceName}>
-            <span style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-              </svg>
-              <span>{workspaceName}</span>
-            </span>
-          </div>
+        <div className="list-section-header">项目列表</div>
+
+        {projects.length > 0 ? (
+          projects.map((project) => {
+            const projectTasks = tasks.filter((t) => t.projectId === project.id);
+            const expanded = expandedIds.has(project.id) || activeProjectId === project.id;
+            return (
+              <div key={project.id} className="project-node">
+                <div
+                  className={`project-node-row ${activeProjectId === project.id ? "active" : ""}`}
+                  onClick={() => {
+                    onSelectProject(project.id);
+                    toggleExpanded(project.id);
+                  }}
+                  title={project.description || project.name}
+                >
+                  <span className="project-chevron">
+                    <svg
+                      width="10"
+                      height="10"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.4"
+                      style={{ transform: expanded ? "rotate(90deg)" : "none", transition: "transform 0.15s" }}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </span>
+                  <span className="project-folder-icon">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                    </svg>
+                  </span>
+                  <span className="truncate project-name">{project.name || "未命名项目"}</span>
+                </div>
+
+                <div className="project-node-actions">
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    title="新建任务"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onNewTask(project.id);
+                    }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <line x1="12" y1="5" x2="12" y2="19" />
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    className="icon-btn"
+                    title="项目设置"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenProjectSettings(project.id);
+                    }}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <circle cx="12" cy="12" r="3" />
+                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                    </svg>
+                  </button>
+                </div>
+
+                {expanded && (
+                  <div className="project-tasks">
+                    {projectTasks.length > 0 ? (
+                      projectTasks.map((task) => (
+                        <div
+                          key={task.id}
+                          className={`task-item nested ${activeTaskId === task.id ? "active" : ""}`}
+                          onClick={() => onSelectTask(task.id)}
+                        >
+                          <span className="truncate" style={{ maxWidth: "150px" }}>
+                            {task.title || "新任务"}
+                          </span>
+                          <button
+                            type="button"
+                            className="icon-btn"
+                            style={{ width: "18px", height: "18px", opacity: 0.6 }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onDeleteTask(task.id);
+                            }}
+                            title="删除任务"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="list-empty-item">还没有任务</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })
         ) : (
-          <div
-            className="list-empty-item"
-            style={{ cursor: onOpenWorkspace ? "pointer" : "default" }}
-            onClick={onOpenWorkspace}
-          >
-            尚未打开项目
-          </div>
+          <div className="list-empty-item">还没有项目</div>
         )}
 
-        {/* Task List */}
-        <div className="list-section-header">任务</div>
-        {tasks.length > 0 ? (
-          tasks.map((task) => (
-            <div
-              key={task.id}
-              className={`task-item ${activeTaskId === task.id ? "active" : ""}`}
-              onClick={() => onSelectTask?.(task.id)}
-            >
-              <span className="truncate" style={{ maxWidth: "180px" }}>
-                {task.title || "新任务"}
-              </span>
-              {onDeleteTask && (
+        {/* Sessions that predate any known project (defensive) */}
+        {unassignedTasks.length > 0 && (
+          <>
+            <div className="list-section-header">未分组任务</div>
+            {unassignedTasks.map((task) => (
+              <div
+                key={task.id}
+                className={`task-item ${activeTaskId === task.id ? "active" : ""}`}
+                onClick={() => onSelectTask(task.id)}
+              >
+                <span className="truncate" style={{ maxWidth: "180px" }}>
+                  {task.title || "新任务"}
+                </span>
                 <button
                   type="button"
                   className="icon-btn"
@@ -123,45 +216,17 @@ export function Sidebar({
                 >
                   ✕
                 </button>
-              )}
-            </div>
-          ))
-        ) : (
-          <div className="list-empty-item">还没有任务</div>
+              </div>
+            ))}
+          </>
         )}
       </div>
 
-      {/* Footer: User Profile, Avatar, Dock Toggle, Settings */}
+      {/* Footer: User Profile */}
       <div className="sidebar-footer">
         <div className="user-profile-info" onClick={onOpenSettings} title="个人信息与账户">
           <div className="user-avatar-circle">{avatarInitial}</div>
           <span className="user-name-text">{userName || "Tempsyche"}</span>
-        </div>
-
-        <div className="footer-actions">
-          <button
-            type="button"
-            className="footer-action-btn"
-            onClick={onToggleCollapse}
-            title={isCollapsed ? "展开侧边栏" : "折叠侧边栏"}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="3" y="3" width="18" height="18" rx="2" />
-              <line x1="9" y1="3" x2="9" y2="21" />
-            </svg>
-          </button>
-
-          <button
-            type="button"
-            className="footer-action-btn"
-            onClick={onOpenSettings}
-            title="设置"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="3" />
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-            </svg>
-          </button>
         </div>
       </div>
     </aside>

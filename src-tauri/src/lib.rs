@@ -31,6 +31,7 @@ pub fn run() {
     let daemon = Arc::new(Mutex::new(DshDaemon::new()));
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(AppState { http, kernel_http, daemon })
         .invoke_handler(tauri::generate_handler![
             commands::load_settings,
@@ -55,6 +56,10 @@ pub fn run() {
             commands::get_token_statistics,
             commands::reset_token_statistics,
             commands::probe_provider,
+            commands::list_projects,
+            commands::create_project,
+            commands::update_project,
+            commands::get_project_token_stats,
             commands::list_sessions,
             commands::create_session,
             commands::load_session_messages,

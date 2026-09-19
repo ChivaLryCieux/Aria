@@ -1,7 +1,7 @@
 use tauri::{AppHandle, State};
 
 use crate::models::{
-    AiProfile, AppSettings, ChatMessage, ChatRequest, ChatResponse, OrchestrationRequest,
+    AiProfile, AppSettings, ChatMessage, ChatRequest, ChatResponse, OrchestrationRequest, Project,
 };
 use crate::orchestration;
 use crate::storage;
@@ -67,6 +67,18 @@ pub async fn execute_orchestration(
     state: State<'_, crate::AppState>,
     request: OrchestrationRequest,
 ) -> Result<Vec<ChatMessage>, String> {
+    // Resolve the owning project for token accounting and kernel workspace.
+    let project = request
+        .conversation_id
+        .as_ref()
+        .and_then(|cid| storage::find_session(&app, cid))
+        .and_then(|session| session.project_id)
+        .and_then(|project_id| {
+            storage::load_projects(&app)
+                .ok()
+                .and_then(|projects| projects.into_iter().find(|p| p.id == project_id))
+        });
+
     let replies = orchestration::execute(
         &app,
         &state.http,
@@ -77,6 +89,7 @@ pub async fn execute_orchestration(
         &request.mode,
         request.conversation_id,
         request.reasoning_effort,
+        project.as_ref().map(|p| (p.id.as_str(), p.name.as_str(), p.default_directory.as_deref())),
     )
     .await;
     Ok(replies)
@@ -244,9 +257,55 @@ pub fn list_sessions(app: AppHandle) -> Result<Vec<storage::SessionSummary>, Str
 }
 
 #[tauri::command]
-pub fn create_session(app: AppHandle, title: Option<String>) -> Result<storage::SessionSummary, String> {
+pub fn create_session(
+    app: AppHandle,
+    title: Option<String>,
+    project_id: Option<String>,
+) -> Result<storage::SessionSummary, String> {
     let t = title.unwrap_or_default();
-    storage::create_session(&app, &t)
+    storage::create_session_in_project(&app, &t, project_id.as_deref())
+}
+
+// ─── Projects ──────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn list_projects(app: AppHandle) -> Result<Vec<Project>, String> {
+    storage::ensure_projects(&app)
+}
+
+#[tauri::command]
+pub fn create_project(
+    app: AppHandle,
+    name: String,
+    description: Option<String>,
+    directories: Vec<String>,
+    default_directory: Option<String>,
+) -> Result<Project, String> {
+    storage::create_project(
+        &app,
+        &name,
+        description.as_deref().unwrap_or(""),
+        directories,
+        default_directory,
+    )
+}
+
+#[tauri::command]
+pub fn update_project(app: AppHandle, project: Project) -> Result<Project, String> {
+    let normalized = storage::normalize_project(project);
+    storage::update_project(&app, normalized)
+}
+
+#[tauri::command]
+pub fn get_project_token_stats(
+    app: AppHandle,
+    project_id: String,
+) -> crate::tokens::ProjectUsageStats {
+    crate::tokens::load_metrics(&app)
+        .projects
+        .into_iter()
+        .find(|p| p.project_id == project_id)
+        .unwrap_or_default()
 }
 
 #[tauri::command]

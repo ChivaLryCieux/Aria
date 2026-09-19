@@ -77,10 +77,8 @@ export function SettingsView({
       <aside className="settings-sidebar">
         {/* Top: App Logo & Back Button */}
         <div className="settings-sidebar-header">
-          <div className="app-logo-badge" title="ZCode / Atrium">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M4 5h16v3.2l-10.2 10.8H20v3H4v-3.2L14.2 8H4V5z" />
-            </svg>
+          <div className="app-logo-badge" title="Atrium // 智役中庭">
+            <img src="/logo.png" alt="Atrium" className="app-logo-icon" />
           </div>
           <button type="button" className="settings-back-btn" onClick={onBack} title="返回工作区">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

@@ -127,13 +127,16 @@ button, input, textarea, select, [role="button"], a {
   justify-content: center;
   width: 24px;
   height: 24px;
-  background: var(--accent-black);
-  border-radius: var(--radius-sm);
-  color: #ffffff;
-  font-weight: 700;
-  font-size: 13px;
-  letter-spacing: -0.5px;
+  background: transparent;
   user-select: none;
+  flex-shrink: 0;
+}
+
+.app-logo-icon {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  display: block;
 }
 
 .history-nav {

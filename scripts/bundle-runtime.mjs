@@ -38,6 +38,15 @@ if (existsSync(daemonScript)) {
   process.exit(1);
 }
 
+// 2b. Check built DeepSeek Harness kernel (required by the desktop bridge)
+const dshBin = resolve(ROOT_DIR, "deepseek-harness/apps/cli/lib/bin.js");
+if (existsSync(dshBin)) {
+  console.log("\x1b[32m[PASS] Built dsh kernel CLI verified.\x1b[0m");
+} else {
+  console.error("\x1b[31m[FAIL] deepseek-harness kernel is not built. Run `pnpm run prepare:kernel`.\x1b[0m");
+  process.exit(1);
+}
+
 // 3. Verify packages
 const packages = ["aria-core", "aria-desktop-host", "aria-dsh-plugin"];
 for (const pkg of packages) {

@@ -7,9 +7,11 @@
 ## 核心定位
 
 Atrium 定位于与 **Codex、ZCode、Antigravity** 同类型的 **AI Agent Harness（智能体装具）** 应用：
-- **装具化调度 (Harness & Dispatch)**：基于 `deepseek-harness` 驱动，每个智能体作为一个标准化算子槽位（Slot），支持专属凭据、模型参数与工程约束。
-- **确定性 DAG 流水线 (Deterministic DAG Pipeline)**：将多节点协同流水线（探针 Probe -> 拓展 Synthesis -> 审校 Critique）深度接入内核级调度。
-- **全向并行群测 (Parallel Concurrency)**：支持多智能体同态输入并列响应，用于基准对比与多样性探索。
+- **真实内核驱动 (Real Kernel Runtime)**：桌面壳通过官方 `@deepseek-ai/dsh-sdk-client` 以 stdio JSON-RPC 拉起 vendored `deepseek-harness` 的 `dsh --profile sdk` 运行时，会话、工具与模型调度全部由 dsh 内核执行，Atrium 不再绕过内核直连 API。
+- **装具化调度 (Harness & Dispatch)**：每个智能体作为一个标准化算子槽位（Slot），支持专属凭据、模型参数与工程约束；多轮上下文由内核会话（Session）持有。
+- **确定性 DAG 流水线 (Deterministic DAG Pipeline)**：多节点协同流水线（探针 Probe -> 拓展 Synthesis -> 审校 Critique）逐节点推进内核会话，节点输出以流式增量实时渲染。
+- **全向并行群测 (Parallel Concurrency)**：多智能体同态输入并列响应，用于基准对比与多样性探索。
+- **直连兜底 (Direct Fallback)**：内核不可用（未构建/无 Node）时自动回退 OpenAI 兼容直连通道，产品保持可用。
 - **Cordis 微内核扩展 (Zero-Pollution Microkernel)**：通过外置的 `@aria/dsh-plugin-desktop` 与 Cordis Profile (`aria-desktop`) 实现无侵入热插拔定制，上游 `deepseek-harness` 仓库保持 0 代码污染。
 
 ---
@@ -32,19 +34,30 @@ Atrium 桌面工作台 (Desktop Host)
 │   ├── 算子槽位管理器 (Agent Harness Slots)
 │   ├── 执行遥测流 (Brutalist Execution Stream)
 │   ├── 装具内核遥测 (Harness Inspector)
-│   └── DSH WebSocket RPC 客户端 (dshClient.ts)
+│   └── DSH WebSocket 流式客户端 (dshClient.ts)
 │
 ├── 宿主层 (Rust + Tauri 2.0)
-│   ├── DSH Daemon 守护进程生命周期 (daemon.rs)
+│   ├── 内核桥接进程托管 (daemon.rs: spawn/探活/退出回收)
+│   ├── 确定性编排拓扑服务 (orchestration.rs: 内核路由 + 直连兜底)
 │   ├── 原生系统遥测与 Explorer 集成 (commands.rs)
-│   ├── 确定性编排拓扑服务 (orchestration.rs)
 │   └── 本地配置与状态持久化 (storage.rs)
 │
 └── 内核层 (DeepSeek Harness / Cordis Microkernel)
+    ├── 内核桥 (@aria/desktop-host: SDK stdio 运行时 + HTTP/WS 桥面)
     ├── 核心运行时 (deepseek-harness upstream) - [ZERO POLLUTION]
-    ├── Cordis Profile (@aria/profile-desktop + cordis.patch.yml)
-    ├── 桌面插件 (@aria/dsh-plugin-desktop: 遥测广播 + 桌面专属工具)
-    └── DAG 流水线注入中间件 (AriaOrchestrationService)
+    ├── SDK 协议 (@deepseek-ai/dsh-sdk-client: initialize/session/prompt)
+    └── Cordis Profile (@aria/profile-desktop + cordis.patch.yml)
+```
+
+### 内核数据流
+
+```text
+React UI ──Tauri IPC──> Rust 编排 ──POST /v1/turn──> @aria/desktop-host
+                                                          │ DeepSeekHarness.run()
+                                                          ▼
+                                        dsh --profile sdk (stdio JSON-RPC 子进程)
+                                                          │ session.event
+React UI <──WS /events── 桥接广播 assistant-stream 增量 ◄──┘
 ```
 
 ---
@@ -59,13 +72,14 @@ pnpm install
 pnpm run sync:upstream
 pnpm run sync:upstream -- --fetch
 
-# 准备桌面打包依赖
-pnpm run bundle:runtime
+# 构建内核（安装并编译 vendored deepseek-harness，桥接层运行的前提）
+pnpm run prepare:kernel
 
 # 启动桌面端开发调试 (Windows Desktop)
 pnpm run tauri:dev
 
 # 构建桌面端独立发行包 (.msi / .exe)
+pnpm run bundle:runtime
 pnpm run tauri:build
 
 # 前端单独构建与类型校验
@@ -77,6 +91,6 @@ pnpm run build
 ## 上游无污染同步机制 (Zero-Pollution Sync Policy)
 
 1. **绝对隔离**：`deepseek-harness/` 保持为官方纯净克隆，不在该目录内修改任何业务代码。
-2. **Profile 叠加**：所有定制项通过 `packages/aria-core/profiles/aria-desktop/` 的 `cordis.patch.yml` 进行声明式覆写。
-3. **插件扩展**：所有桌面桥接工具与遥测钩子由 `packages/aria-dsh-plugin/` 承载，热插拔挂载入 Cordis 微内核上下文。
-4. **一键同步**：运行 `pnpm run sync:upstream` 自动校验目录干净度、检测上游新 Tag 并验证 Cordis Profile 兼容性。
+2. **Profile 叠加**：内核定制通过有序 `--patch` 覆写文件（`packages/aria-core/profiles/aria-desktop/atrium-sdk.cordis.patch.yml`）声明式注入 SDK 运行时。
+3. **进程边界**：Atrium 与内核之间的全部交互收敛在官方 SDK 协议（initialize / session/prompt / session.event），桌面侧不做任何内核内改造。
+4. **一键同步**：运行 `pnpm run sync:upstream` 自动校验目录干净度、检测上游新 Tag 并验证 Cordis Profile 兼容性；`pnpm run prepare:kernel` 负责内核安装与构建。

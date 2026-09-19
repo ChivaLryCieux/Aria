@@ -7,9 +7,51 @@
     <link rel="icon" type="image/x-icon" href="/favicon.ico" />
     <link rel="icon" type="image/png" href="/logo.png" />
     <link rel="apple-touch-icon" href="/logo.png" />
+    <style>
+      /* Boot splash: pure static markup, visible the moment the webview paints
+         and hidden by CSS as soon as React fills #root (no JS involved). */
+      #boot-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 18px;
+        background: #fcfcfd;
+        user-select: none;
+      }
+      #boot-splash img {
+        width: 76px;
+        height: 76px;
+        object-fit: contain;
+        animation: boot-breathe 1.6s ease-in-out infinite;
+      }
+      #boot-splash .boot-wordmark {
+        font-family: "JetBrains Mono", Consolas, Menlo, monospace;
+        font-size: 12px;
+        letter-spacing: 3px;
+        color: #71717a;
+      }
+      @keyframes boot-breathe {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.55; transform: scale(0.96); }
+      }
+      /* React has mounted — drop the splash */
+      #root:not(:empty) ~ #boot-splash { display: none; }
+      @media (prefers-color-scheme: dark) {
+        #boot-splash { background: #161618; }
+        #boot-splash .boot-wordmark { color: #8e8e96; }
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
+    <div id="boot-splash">
+      <img src="/logo.png" alt="Atrium" draggable="false" />
+      <div class="boot-wordmark">ATRIUM // 智役中庭</div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

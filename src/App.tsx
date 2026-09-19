@@ -7,6 +7,7 @@ import { CenterHome } from "./components/CenterHome";
 import { SettingsView } from "./components/SettingsView";
 import { ProjectDialog } from "./components/ProjectDialog";
 import { SoulManagerDialog } from "./components/SoulManagerDialog";
+import { PromptCard } from "./components/PromptCard";
 import { createUserMessage } from "./constants/defaults";
 import {
   AiProfile,
@@ -340,14 +341,11 @@ export function App() {
     }
   };
 
-  // ── Reasoning effort cycling (最高 → 标准 → 关闭) ────────────
-  const EFFORT_ORDER: ReasoningEffort[] = ["max", "high", "off"];
-
-  const handleCycleReasoningEffort = () => {
-    const next = EFFORT_ORDER[(EFFORT_ORDER.indexOf(reasoningEffort) + 1) % EFFORT_ORDER.length];
-    setReasoningEffort(next);
+  // ── Reasoning effort selection (persisted) ───────────────────
+  const handleSelectReasoningEffort = (effort: ReasoningEffort) => {
+    setReasoningEffort(effort);
     if (settings) {
-      handleSaveSettings({ ...settings, reasoningEffort: next });
+      handleSaveSettings({ ...settings, reasoningEffort: effort });
     }
   };
 
@@ -537,21 +535,22 @@ export function App() {
           {/* Center Stage Canvas */}
           <main className="stage-container">
             {messages.length === 0 ? (
-              /* Home / Greeting Stage (Exact 1:1 match to screenshot) */
+              /* Home / Greeting Stage */
               <CenterHome
                 draft={draft}
                 setDraft={setDraft}
                 onSend={handleSend}
                 isSending={isSending}
-                profiles={settings?.aiProfiles || []}
-                selectedProfileId={activeProfileId}
-                onSelectProfile={setActiveProfileId}
+                activeProject={activeProject}
+                fallbackProjectName={workspaceName}
+                souls={souls}
+                activeSoul={activeSoulFolder}
+                onActivateSoul={handleActivateSoul}
+                models={activeProfile?.models ?? []}
                 selectedModel={selectedModel}
                 onSelectModel={setSelectedModel}
                 reasoningEffort={reasoningEffort}
-                onSelectReasoningEffort={handleCycleReasoningEffort}
-                workspaceName={workspaceName}
-                onOpenWorkspace={handleOpenWorkspace}
+                onSelectReasoningEffort={handleSelectReasoningEffort}
               />
             ) : (
               /* Active Conversation View */
@@ -575,40 +574,23 @@ export function App() {
 
                 {/* Bottom Docked Input Box in Active Chat */}
                 <div className="chat-docked-input">
-                  <div className="prompt-card" style={{ width: "720px" }}>
-                    <textarea
-                      className="prompt-textarea"
-                      placeholder="向 Atrium 提问，继续跟进任务..."
-                      value={draft}
-                      onChange={(e) => setDraft(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && !e.shiftKey) {
-                          e.preventDefault();
-                          handleSend();
-                        }
-                      }}
-                      rows={2}
-                    />
-                    <div className="prompt-card-footer">
-                      <div className="footer-left-controls">
-                        <span className="model-tag-pill">ds/{selectedModel}</span>
-                      </div>
-                      <div className="footer-right-controls">
-                        <button
-                          type="button"
-                          className="send-arrow-btn"
-                          disabled={!draft.trim() || isSending}
-                          onClick={handleSend}
-                          title="发送"
-                        >
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                            <line x1="12" y1="19" x2="12" y2="5" strokeLinecap="round" />
-                            <polyline points="5 12 12 5 19 12" strokeLinecap="round" strokeLinejoin="round" />
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                  <PromptCard
+                    projectName={activeProject?.name?.trim() || workspaceName}
+                    projectTooltip={activeProject?.description || activeProject?.defaultDirectory || undefined}
+                    placeholder="向 Atrium 提问，继续跟进任务..."
+                    draft={draft}
+                    setDraft={setDraft}
+                    onSend={handleSend}
+                    isSending={isSending}
+                    souls={souls}
+                    activeSoul={activeSoulFolder}
+                    onActivateSoul={handleActivateSoul}
+                    models={activeProfile?.models ?? []}
+                    selectedModel={selectedModel}
+                    onSelectModel={setSelectedModel}
+                    reasoningEffort={reasoningEffort}
+                    onSelectReasoningEffort={handleSelectReasoningEffort}
+                  />
                 </div>
               </div>
             )}

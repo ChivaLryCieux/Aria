@@ -766,7 +766,7 @@ button, input, textarea, select, [role="button"], a {
   display: flex;
   justify-content: center;
   padding: 16px 24px 20px;
-  background: linear-gradient(180deg, rgba(252, 252, 253, 0) 0%, rgba(252, 252, 253, 1) 40%);
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, var(--bg-app) 40%);
 }
 
 /* Modal Overlay for Settings / Help */
@@ -1947,4 +1947,102 @@ button, input, textarea, select, [role="button"], a {
 .soul-dirty {
   font-size: 11px;
   color: var(--signal-amber, #d9a441);
+}
+
+/* ─── Prompt card: static project label + pill dropdowns ───── */
+.project-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: var(--radius-full);
+  background: var(--bg-pill);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  user-select: none;
+  max-width: 320px;
+}
+
+.project-label span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pill-dropdown {
+  position: relative;
+}
+
+.pill-dropdown-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  max-width: 200px;
+}
+
+.pill-dropdown-btn:hover {
+  background: var(--bg-pill);
+  color: var(--text-primary);
+}
+
+.pill-dropdown-btn span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pill-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  min-width: 176px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-modal);
+  padding: 4px;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+}
+
+.pill-dropdown-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 10px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.pill-dropdown-item:hover {
+  background: var(--bg-pill);
+  color: var(--text-primary);
+}
+
+.pill-dropdown-item.active {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.pill-dropdown-empty {
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
 }

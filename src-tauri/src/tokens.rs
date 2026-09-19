@@ -34,12 +34,12 @@ pub fn load_metrics(app: &AppHandle) -> TokenMetrics {
     };
 
     if !path.exists() {
-        return default_initial_metrics();
+        return TokenMetrics::default();
     }
 
     match fs::read_to_string(&path) {
-        Ok(content) => serde_json::from_str(&content).unwrap_or_else(|_| default_initial_metrics()),
-        Err(_) => default_initial_metrics(),
+        Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
+        Err(_) => TokenMetrics::default(),
     }
 }
 
@@ -124,36 +124,4 @@ pub fn estimate_tokens(text: &str) -> usize {
     }
 
     std::cmp::max(count, 1)
-}
-
-fn default_initial_metrics() -> TokenMetrics {
-    TokenMetrics {
-        total_prompt_tokens: 128450,
-        total_completion_tokens: 46230,
-        total_requests: 84,
-        total_latency_ms: 52080,
-        models: vec![
-            ModelUsageStats {
-                model_name: "deepseek-flash".to_string(),
-                prompt_tokens: 82100,
-                completion_tokens: 24500,
-                request_count: 52,
-                total_latency_ms: 19760,
-            },
-            ModelUsageStats {
-                model_name: "deepseek-chat".to_string(),
-                prompt_tokens: 34120,
-                completion_tokens: 12800,
-                request_count: 22,
-                total_latency_ms: 14300,
-            },
-            ModelUsageStats {
-                model_name: "deepseek-reasoner".to_string(),
-                prompt_tokens: 12230,
-                completion_tokens: 8930,
-                request_count: 10,
-                total_latency_ms: 18020,
-            },
-        ],
-    }
 }

@@ -121,6 +121,7 @@ pub async fn execute(
     base_messages: &[ChatMessage],
     mode: &str,
     conversation_id: Option<String>,
+    reasoning_effort: Option<String>,
 ) -> Vec<ChatMessage> {
     let kernel_ready = {
         let mut guard = daemon.lock().await;
@@ -135,9 +136,9 @@ pub async fn execute(
     if kernel_ready {
         let conversation = conversation_id.unwrap_or_else(|| format!("adhoc-{}", Uuid::new_v4()));
         if mode == "parallel" {
-            execute_parallel_kernel(kernel_http, profiles, base_messages, &conversation).await
+            execute_parallel_kernel(kernel_http, profiles, base_messages, &conversation, reasoning_effort).await
         } else {
-            execute_dag_kernel(app, kernel_http, profiles, base_messages, &conversation).await
+            execute_dag_kernel(app, kernel_http, profiles, base_messages, &conversation, reasoning_effort).await
         }
     } else if mode == "parallel" {
         execute_parallel(http, profiles, base_messages).await
@@ -156,6 +157,8 @@ struct KernelTurnRequest {
     provider: String,
     model: String,
     api_key: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reasoning_effort: Option<String>,
     prompt: String,
 }
 
@@ -242,6 +245,7 @@ async fn execute_dag_kernel(
     profiles: &[AiProfile],
     base_messages: &[ChatMessage],
     conversation: &str,
+    reasoning_effort: Option<String>,
 ) -> Vec<ChatMessage> {
     let stages = build_stages(profiles);
     let daemon_url = "http://127.0.0.1:19387";
@@ -267,6 +271,7 @@ async fn execute_dag_kernel(
             provider: "deepseek-official".to_string(),
             model: stage.profile.model.clone(),
             api_key: stage.profile.api_key.clone(),
+            reasoning_effort: reasoning_effort.clone(),
             prompt: kernel_stage_prompt(stage, index, &user_input),
         };
 
@@ -333,6 +338,7 @@ async fn execute_parallel_kernel(
     profiles: &[AiProfile],
     base_messages: &[ChatMessage],
     conversation: &str,
+    reasoning_effort: Option<String>,
 ) -> Vec<ChatMessage> {
     let daemon_url = "http://127.0.0.1:19387";
     let user_input = latest_user_input(base_messages);
@@ -350,6 +356,7 @@ async fn execute_parallel_kernel(
             provider: "deepseek-official".to_string(),
             model: profile.model.clone(),
             api_key: profile.api_key.clone(),
+            reasoning_effort: reasoning_effort.clone(),
             prompt,
         };
         async move {

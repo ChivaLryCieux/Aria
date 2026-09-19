@@ -34,6 +34,9 @@ fn default_settings() -> AppSettings {
         user_name: "我".to_string(),
         ai_profiles: vec![default_profile()],
         orchestration_mode: "dag".to_string(),
+        reasoning_effort: None,
+        theme_mode: Some("light".to_string()),
+        font_size: Some("14px".to_string()),
     }
 }
 
@@ -42,9 +45,9 @@ fn default_profile() -> AiProfile {
         id: "atrium-prime".to_string(),
         name: "Atrium Prime".to_string(),
         avatar: "ATRIUM".to_string(),
-        endpoint: "https://api.openai.com/v1/chat/completions".to_string(),
+        endpoint: "https://api.deepseek.com/v1/chat/completions".to_string(),
         api_key: String::new(),
-        model: "gpt-4o-mini".to_string(),
+        model: "deepseek-flash".to_string(),
         system_prompt: "你是 Atrium 智役中庭的主控智能体（Atrium Prime）。作为装具中枢，你冷静、精确、恪守事实，提供高信息密度、逻辑严谨的工程与技术分析。".to_string(),
         temperature: 0.5,
     }
@@ -57,6 +60,21 @@ fn normalize_settings(mut settings: AppSettings) -> AppSettings {
     }
     if settings.orchestration_mode != "dag" && settings.orchestration_mode != "parallel" {
         settings.orchestration_mode = "dag".to_string();
+    }
+    if let Some(effort) = &settings.reasoning_effort {
+        if !["off", "low", "high", "max"].contains(&effort.as_str()) {
+            settings.reasoning_effort = None;
+        }
+    }
+    if let Some(theme) = &settings.theme_mode {
+        if !["light", "system", "dark"].contains(&theme.as_str()) {
+            settings.theme_mode = None;
+        }
+    }
+    if let Some(size) = &settings.font_size {
+        if !["13px", "14px", "15px"].contains(&size.as_str()) {
+            settings.font_size = None;
+        }
     }
     settings
 }

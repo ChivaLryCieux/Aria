@@ -76,6 +76,7 @@ pub async fn execute_orchestration(
         &request.messages,
         &request.mode,
         request.conversation_id,
+        request.reasoning_effort,
     )
     .await;
     Ok(replies)
@@ -181,6 +182,46 @@ pub fn toggle_maximize_window(window: tauri::Window) -> Result<(), String> {
 #[tauri::command]
 pub fn close_window(window: tauri::Window) -> Result<(), String> {
     window.close().map_err(|e| e.to_string())
+}
+
+// ─── Provider probe ────────────────────────────────────────────
+
+#[tauri::command]
+pub async fn probe_provider(
+    state: State<'_, crate::AppState>,
+    endpoint: String,
+    api_key: String,
+) -> Result<String, String> {
+    let base = endpoint.trim().trim_end_matches('/');
+    let base = base
+        .strip_suffix("/chat/completions")
+        .or_else(|| base.strip_suffix("/responses"))
+        .unwrap_or(base);
+    if base.is_empty() {
+        return Err("API 地址为空".to_string());
+    }
+
+    let response = state
+        .http
+        .get(format!("{base}/models"))
+        .bearer_auth(api_key.trim())
+        .timeout(std::time::Duration::from_secs(10))
+        .send()
+        .await
+        .map_err(|e| format!("无法连通 {base}: {e}"))?;
+
+    let status = response.status();
+    if status.is_success() {
+        let body = response.text().await.unwrap_or_default();
+        let count = serde_json::from_str::<serde_json::Value>(&body)
+            .ok()
+            .and_then(|v| v.get("data").and_then(|d| d.as_array()).map(|a| a.len()))
+            .map(|n| format!("，可用模型 {n} 个"))
+            .unwrap_or_default();
+        Ok(format!("连通正常 ({status}){count}"))
+    } else {
+        Err(format!("{base} 返回 {status}，请检查凭据或地址"))
+    }
 }
 
 // ─── Token Statistics ──────────────────────────────────────────

@@ -54,6 +54,7 @@ pub fn run() {
             commands::close_window,
             commands::get_token_statistics,
             commands::reset_token_statistics,
+            commands::probe_provider,
             commands::list_sessions,
             commands::create_session,
             commands::load_session_messages,

@@ -11,10 +11,15 @@ export type AiProfile = {
 
 export type OrchestrationMode = "parallel" | "dag";
 
+export type ReasoningEffort = "off" | "low" | "high" | "max";
+
 export type AppSettings = {
   userName: string;
   aiProfiles: AiProfile[];
   orchestrationMode: OrchestrationMode;
+  reasoningEffort?: ReasoningEffort | null;
+  themeMode?: "light" | "system" | "dark" | null;
+  fontSize?: "13px" | "14px" | "15px" | null;
 };
 
 export type ChatRole = "user" | "assistant" | "system";

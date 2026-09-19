@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { AppSettings, AiProfile, TokenMetrics } from "../types/chat";
+import { KERNEL_MODEL_CATALOG } from "./CenterHome";
 
 type SettingsTab = "general" | "appearance" | "model" | "tokens";
 
@@ -28,9 +29,10 @@ export function SettingsView({
   const [activeProfileId, setActiveProfileId] = useState<string>(
     settings.aiProfiles[0]?.id || ""
   );
-  const [themeMode, setThemeMode] = useState<"light" | "system" | "dark">("light");
-  const [fontSize, setFontSize] = useState<"13px" | "14px" | "15px">("14px");
   const [tokenMetrics, setTokenMetrics] = useState<TokenMetrics | null>(null);
+
+  const themeMode = settings.themeMode ?? "light";
+  const fontSize = settings.fontSize ?? "14px";
 
   useEffect(() => {
     if (activeTab === "tokens") {
@@ -69,6 +71,47 @@ export function SettingsView({
       ...settings,
       userName: userName.trim() || "Tempsyche",
     });
+  };
+
+  const handleAddProvider = async () => {
+    try {
+      const profile = await invoke<AiProfile>("create_profile");
+      const next: AppSettings = {
+        ...settings,
+        aiProfiles: [...settings.aiProfiles, profile],
+      };
+      onSaveSettings(next);
+      setActiveProfileId(profile.id);
+    } catch (err) {
+      console.error("添加供应商失败:", err);
+    }
+  };
+
+  const handleDeleteProvider = async () => {
+    if (!currentProfile) return;
+    if (!confirm(`确定要删除供应商「${currentProfile.name}」吗？`)) return;
+    try {
+      const next = await invoke<AppSettings>("delete_profile", {
+        profileId: currentProfile.id,
+      });
+      onSaveSettings(next);
+      setActiveProfileId(next.aiProfiles[0]?.id || "");
+    } catch (err) {
+      console.error("删除供应商失败:", err);
+    }
+  };
+
+  const handleProbeProvider = async () => {
+    if (!currentProfile) return;
+    try {
+      const message = await invoke<string>("probe_provider", {
+        endpoint: currentProfile.endpoint,
+        apiKey: currentProfile.apiKey,
+      });
+      alert(`通道自检通过：${message}`);
+    } catch (err) {
+      alert(`通道自检失败：${String(err)}`);
+    }
   };
 
   return (
@@ -197,7 +240,7 @@ export function SettingsView({
                     type="text"
                     className="zcode-input"
                     readOnly
-                    value={workspacePath || "c:\\Users\\LRY\\Desktop\\BASE\\Aria"}
+                    value={workspacePath || "（尚未定位工作区目录）"}
                   />
                   <button type="button" className="zcode-btn-secondary" onClick={onOpenWorkspace}>
                     打开目录
@@ -270,27 +313,18 @@ export function SettingsView({
                 </div>
                 <div className="setting-control-col">
                   <div className="theme-toggle-group">
-                    <button
-                      type="button"
-                      className={`theme-option-btn ${themeMode === "light" ? "active" : ""}`}
-                      onClick={() => setThemeMode("light")}
-                    >
-                      <span>明亮浅色 (ZCode)</span>
-                    </button>
-                    <button
-                      type="button"
-                      className={`theme-option-btn ${themeMode === "system" ? "active" : ""}`}
-                      onClick={() => setThemeMode("system")}
-                    >
-                      <span>跟随操作系统</span>
-                    </button>
-                    <button
-                      type="button"
-                      className={`theme-option-btn ${themeMode === "dark" ? "active" : ""}`}
-                      onClick={() => setThemeMode("dark")}
-                    >
-                      <span>暗黑冷灰</span>
-                    </button>
+                    {(["light", "system", "dark"] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        className={`theme-option-btn ${themeMode === mode ? "active" : ""}`}
+                        onClick={() => onSaveSettings({ ...settings, themeMode: mode })}
+                      >
+                        <span>
+                          {mode === "light" ? "明亮浅色" : mode === "system" ? "跟随操作系统" : "暗黑冷灰"}
+                        </span>
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -304,7 +338,9 @@ export function SettingsView({
                   <select
                     className="zcode-select"
                     value={fontSize}
-                    onChange={(e) => setFontSize(e.target.value as any)}
+                    onChange={(e) =>
+                      onSaveSettings({ ...settings, fontSize: e.target.value as AppSettings["fontSize"] })
+                    }
                   >
                     <option value="13px">紧凑 (13px)</option>
                     <option value="14px">标准 (14px)</option>
@@ -334,7 +370,7 @@ export function SettingsView({
                     <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
                   </svg>
                 </button>
-                <button type="button" className="zcode-btn-primary">
+                <button type="button" className="zcode-btn-primary" onClick={handleAddProvider}>
                   + 添加供应商
                 </button>
               </div>
@@ -418,9 +454,18 @@ export function SettingsView({
                       <button
                         type="button"
                         className="zcode-btn-dark-pill"
-                        onClick={() => alert("端点连通性自检：正常响应 200 OK")}
+                        onClick={handleProbeProvider}
+                        title="使用当前端点与凭据执行连通性自检"
                       >
                         测试通道
+                      </button>
+                      <button
+                        type="button"
+                        className="zcode-btn-danger small"
+                        onClick={handleDeleteProvider}
+                        title="删除当前自定义供应商"
+                      >
+                        删除
                       </button>
                     </div>
                   </div>
@@ -467,11 +512,11 @@ export function SettingsView({
                     </div>
 
                     <div className="models-table">
-                      {["deepseek-chat", "deepseek-reasoner", "deepseek-flash"].map((modelId) => (
+                      {KERNEL_MODEL_CATALOG.map((modelId) => (
                         <div key={modelId} className="model-row-item">
                           <div className="model-info">
                             <span className="model-title">{modelId}</span>
-                            <span className="model-tag">128K 上下文</span>
+                            <span className="model-tag">DSH 内核目录</span>
                           </div>
                           <button
                             type="button"

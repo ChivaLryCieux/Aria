@@ -1,5 +1,14 @@
 import React from "react";
-import { AiProfile } from "../types/chat";
+import { AiProfile, ReasoningEffort } from "../types/chat";
+
+export const KERNEL_MODEL_CATALOG = ["deepseek-flash", "deepseek-v4-pro"] as const;
+
+const EFFORT_LABEL: Record<ReasoningEffort, string> = {
+  max: "最高",
+  high: "标准",
+  low: "低",
+  off: "关闭",
+};
 
 type CenterHomeProps = {
   draft: string;
@@ -11,6 +20,8 @@ type CenterHomeProps = {
   onSelectProfile: (id: string) => void;
   selectedModel: string;
   onSelectModel: (m: string) => void;
+  reasoningEffort: ReasoningEffort;
+  onSelectReasoningEffort: () => void;
   workspaceName?: string;
   onOpenWorkspace?: () => void;
 };
@@ -25,6 +36,8 @@ export function CenterHome({
   onSelectProfile,
   selectedModel,
   onSelectModel,
+  reasoningEffort,
+  onSelectReasoningEffort,
   workspaceName = "更改环境",
   onOpenWorkspace,
 }: CenterHomeProps) {
@@ -67,7 +80,7 @@ export function CenterHome({
         {/* Text Input Area */}
         <textarea
           className="prompt-textarea"
-          placeholder="向 ZCode 提问，使用 @ 添加上下文，使用 / 呼出指令能力"
+          placeholder="向 Atrium 提问，使用 @ 添加上下文，使用 / 呼出指令能力"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -107,13 +120,13 @@ export function CenterHome({
 
           {/* Right Controls (No button background / no emoji) */}
           <div className="footer-right-controls">
-            {/* Model Tag - Clean text link without button background */}
+            {/* Model Tag - Cycles the kernel model catalog */}
             <button
               type="button"
               className="model-tag-pill"
               title="切换底层模型"
               onClick={() => {
-                const models = ["deepseek-flash", "deepseek-chat", "deepseek-reasoner"];
+                const models = KERNEL_MODEL_CATALOG as readonly string[];
                 const curIdx = models.indexOf(selectedModel);
                 const nextModel = models[(curIdx + 1) % models.length];
                 onSelectModel(nextModel);
@@ -125,9 +138,14 @@ export function CenterHome({
               </svg>
             </button>
 
-            {/* Mode Tag - Clean text link without emoji and without background */}
-            <button type="button" className="mode-tag-pill" title="性能或推理档位">
-              <span>最高</span>
+            {/* Effort Tag - cycles kernel reasoning effort, persisted in settings */}
+            <button
+              type="button"
+              className="mode-tag-pill"
+              title="推理档位（最高 / 标准 / 关闭）"
+              onClick={onSelectReasoningEffort}
+            >
+              <span>{EFFORT_LABEL[reasoningEffort] ?? "标准"}</span>
               <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
               </svg>

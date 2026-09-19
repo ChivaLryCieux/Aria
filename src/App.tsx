@@ -13,6 +13,7 @@ import {
   OrchestrationProgressEvent,
   OrchestrationStage,
   PendingMessage,
+  ReasoningEffort,
   SessionSummary,
 } from "./types/chat";
 import { createPendingMessages } from "./utils/messages";
@@ -25,6 +26,7 @@ export function App() {
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [activeProfileId, setActiveProfileId] = useState<string>("");
   const [selectedModel, setSelectedModel] = useState<string>("deepseek-flash");
+  const [reasoningEffort, setReasoningEffort] = useState<"off" | "low" | "high" | "max">("high");
   const [draft, setDraft] = useState<string>("");
   const [isSending, setIsSending] = useState<boolean>(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
@@ -56,6 +58,9 @@ export function App() {
           if (loaded.aiProfiles[0].model) {
             setSelectedModel(loaded.aiProfiles[0].model);
           }
+        }
+        if (loaded.reasoningEffort) {
+          setReasoningEffort(loaded.reasoningEffort);
         }
       })
       .catch(console.error);
@@ -131,6 +136,30 @@ export function App() {
       messageEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages]);
+
+  // ── Apply theme + font scale ─────────────────────────────────
+  useEffect(() => {
+    if (!settings) return;
+    const root = document.documentElement;
+    const theme = settings.themeMode ?? "light";
+    root.dataset.theme = theme;
+    if (theme === "system") {
+      const media = window.matchMedia("(prefers-color-scheme: dark)");
+      root.dataset.resolvedTheme = media.matches ? "dark" : "light";
+      const onChange = (e: MediaQueryListEvent) => {
+        root.dataset.resolvedTheme = e.matches ? "dark" : "light";
+      };
+      media.addEventListener("change", onChange);
+      return () => media.removeEventListener("change", onChange);
+    }
+    root.dataset.resolvedTheme = theme;
+  }, [settings?.themeMode]);
+
+  useEffect(() => {
+    const size = settings?.fontSize ?? "14px";
+    const zoom = size === "13px" ? 0.94 : size === "15px" ? 1.06 : 1.0;
+    document.body.style.zoom = String(zoom);
+  }, [settings?.fontSize]);
 
   // ── Persist chat history (debounced) ─────────────────────────
   useEffect(() => {
@@ -237,11 +266,22 @@ export function App() {
 
   // ── Open Workspace Directory ─────────────────────────────────
   const handleOpenWorkspace = async () => {
+    if (!workspacePath) return;
     try {
-      const path = workspacePath || "c:\\Users\\LRY\\Desktop\\BASE\\Aria";
-      await invoke("open_path_in_explorer", { path });
+      await invoke("open_path_in_explorer", { path: workspacePath });
     } catch (err) {
       console.error("Failed to open path:", err);
+    }
+  };
+
+  // ── Reasoning effort cycling (最高 → 标准 → 关闭) ────────────
+  const EFFORT_ORDER: ReasoningEffort[] = ["max", "high", "off"];
+
+  const handleCycleReasoningEffort = () => {
+    const next = EFFORT_ORDER[(EFFORT_ORDER.indexOf(reasoningEffort) + 1) % EFFORT_ORDER.length];
+    setReasoningEffort(next);
+    if (settings) {
+      handleSaveSettings({ ...settings, reasoningEffort: next });
     }
   };
 
@@ -313,6 +353,7 @@ export function App() {
           messages: baseMessages,
           mode: settings.orchestrationMode,
           conversationId: curSessionId,
+          reasoningEffort,
         },
       });
 
@@ -440,6 +481,8 @@ export function App() {
                 onSelectProfile={setActiveProfileId}
                 selectedModel={selectedModel}
                 onSelectModel={setSelectedModel}
+                reasoningEffort={reasoningEffort}
+                onSelectReasoningEffort={handleCycleReasoningEffort}
                 workspaceName={workspaceName}
                 onOpenWorkspace={handleOpenWorkspace}
               />

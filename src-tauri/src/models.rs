@@ -24,6 +24,15 @@ pub struct AppSettings {
     pub ai_profiles: Vec<AiProfile>,
     #[serde(default = "default_orchestration_mode")]
     pub orchestration_mode: String,
+    /// Kernel agent reasoning effort: off | low | high | max.
+    #[serde(default)]
+    pub reasoning_effort: Option<String>,
+    /// UI theme: light | system | dark.
+    #[serde(default)]
+    pub theme_mode: Option<String>,
+    /// UI font scale preset: 13px | 14px | 15px.
+    #[serde(default)]
+    pub font_size: Option<String>,
 }
 
 fn default_orchestration_mode() -> String {
@@ -78,6 +87,9 @@ pub struct OrchestrationRequest {
     /// Atrium conversation identity; binds kernel sessions across turns.
     #[serde(default)]
     pub conversation_id: Option<String>,
+    /// Kernel reasoning effort override for this run.
+    #[serde(default)]
+    pub reasoning_effort: Option<String>,
 }
 
 /// Event emitted to the frontend during orchestration execution.

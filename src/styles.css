@@ -1812,3 +1812,139 @@ button, input, textarea, select, [role="button"], a {
   border-radius: var(--radius-md);
   color: var(--text-secondary);
 }
+
+/* ─── Souls manager ────────────────────────────────────────── */
+.soul-dialog {
+  width: 760px;
+  max-width: 92vw;
+}
+
+.soul-split {
+  display: flex;
+  min-height: 420px;
+  max-height: 68vh;
+}
+
+.soul-list {
+  width: 190px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border-subtle);
+  padding: 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+}
+
+.soul-list-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-secondary);
+  transition: background 0.15s;
+}
+
+.soul-list-item:hover {
+  background: var(--bg-sidebar-hover);
+}
+
+.soul-list-item.active {
+  background: var(--bg-sidebar-active);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.soul-item-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.soul-item-badges {
+  display: flex;
+  gap: 4px;
+}
+
+.soul-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  background: var(--bg-pill);
+  color: var(--text-muted);
+  width: fit-content;
+}
+
+.soul-badge.active-badge {
+  background: var(--accent-black);
+  color: var(--accent-on-black, #fff);
+}
+
+.soul-new-btn {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s;
+}
+
+.soul-new-btn:hover,
+.soul-new-btn.active {
+  background: var(--bg-sidebar-hover);
+  color: var(--text-primary);
+}
+
+.soul-editor {
+  flex: 1;
+  min-width: 0;
+  padding: 16px 18px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.soul-textarea {
+  width: 100%;
+  min-height: 220px;
+  resize: vertical;
+  padding: 10px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.soul-textarea:focus {
+  outline: none;
+  border-color: var(--border-focus);
+}
+
+.soul-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 14px;
+}
+
+.soul-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.soul-dirty {
+  font-size: 11px;
+  color: var(--signal-amber, #d9a441);
+}

@@ -6,6 +6,7 @@ import { Sidebar, TaskSummary } from "./components/Sidebar";
 import { CenterHome } from "./components/CenterHome";
 import { SettingsView } from "./components/SettingsView";
 import { ProjectDialog } from "./components/ProjectDialog";
+import { SoulManagerDialog } from "./components/SoulManagerDialog";
 import { createUserMessage } from "./constants/defaults";
 import {
   AiProfile,
@@ -17,6 +18,7 @@ import {
   Project,
   ReasoningEffort,
   SessionSummary,
+  Soul,
 } from "./types/chat";
 import { createPendingMessages } from "./utils/messages";
 import { dshClient, KernelStatusEvent } from "./services/dshClient";
@@ -28,6 +30,8 @@ export function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [projectDialog, setProjectDialog] = useState<{ mode: "create" | "edit"; projectId?: string } | null>(null);
+  const [souls, setSouls] = useState<Soul[]>([]);
+  const [isSoulDialogOpen, setIsSoulDialogOpen] = useState<boolean>(false);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [activeProfileId, setActiveProfileId] = useState<string>("");
   const [selectedModel, setSelectedModel] = useState<string>("deepseek-flash");
@@ -118,6 +122,9 @@ export function App() {
         if (list.length > 0) setActiveProjectId(list[0].id);
       })
       .catch(console.error);
+
+    // Personas (creates Souls/Default/SOUL.md on first run)
+    invoke<Soul[]>("list_souls").then(setSouls).catch(console.error);
 
     // Initialize DSH daemon client in background
     dshClient.init().catch(console.error);
@@ -263,6 +270,26 @@ export function App() {
         setActiveProjectId(saved.id);
       })
       .catch(console.error);
+  };
+
+  // ── Souls (personas) ─────────────────────────────────────────
+  const activeSoulFolder = settings?.activeSoul ?? "Default";
+
+  const handleActivateSoul = (folder: string) => {
+    if (settings) {
+      handleSaveSettings({ ...settings, activeSoul: folder });
+    }
+  };
+
+  const handleSoulsChanged = () => {
+    invoke<Soul[]>("list_souls").then(setSouls).catch(console.error);
+  };
+
+  const handleSoulDeleted = (folder: string) => {
+    handleSoulsChanged();
+    if (folder === activeSoulFolder) {
+      handleActivateSoul("Default");
+    }
   };
 
   // ── Select Existing Session ──────────────────────────────────
@@ -494,6 +521,7 @@ export function App() {
             userName={settings?.userName || "Tempsyche"}
             isCollapsed={isSidebarCollapsed}
             onOpenSettings={() => setCurrentView("settings")}
+            onOpenSouls={() => setIsSoulDialogOpen(true)}
             projects={projects}
             tasks={sidebarTasks}
             activeTaskId={activeSessionId || undefined}
@@ -600,6 +628,18 @@ export function App() {
           fallbackDirectory={workspacePath}
           onClose={() => setProjectDialog(null)}
           onSaved={handleProjectSaved}
+        />
+      )}
+
+      {/* Souls (persona) manager */}
+      {isSoulDialogOpen && (
+        <SoulManagerDialog
+          souls={souls}
+          activeSoul={activeSoulFolder}
+          onActivate={handleActivateSoul}
+          onChanged={handleSoulsChanged}
+          onDeleted={handleSoulDeleted}
+          onClose={() => setIsSoulDialogOpen(false)}
         />
       )}
 

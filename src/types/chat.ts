@@ -28,6 +28,7 @@ export type AppSettings = {
   reasoningEffort?: ReasoningEffort | null;
   themeMode?: "light" | "system" | "dark" | null;
   fontSize?: "13px" | "14px" | "15px" | null;
+  activeSoul?: string | null;
 };
 
 export type ChatRole = "user" | "assistant" | "system";
@@ -110,5 +111,13 @@ export type ProjectUsageStats = {
   requestCount: number;
   totalLatencyMs: number;
   models: ModelUsageStats[];
+};
+
+export type Soul = {
+  folder: string;
+  name: string;
+  description: string;
+  content: string;
+  isDefault: boolean;
 };
 

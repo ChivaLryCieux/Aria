@@ -12,6 +12,7 @@ type SidebarProps = {
   userName: string;
   isCollapsed: boolean;
   onOpenSettings: () => void;
+  onOpenSouls: () => void;
   projects: Project[];
   tasks: TaskSummary[];
   activeTaskId?: string;
@@ -28,6 +29,7 @@ export function Sidebar({
   userName = "Tempsyche",
   isCollapsed,
   onOpenSettings,
+  onOpenSouls,
   projects,
   tasks,
   activeTaskId,
@@ -66,6 +68,18 @@ export function Sidebar({
               </svg>
             </span>
             <span>设置</span>
+          </div>
+        </button>
+
+        <button type="button" className="action-row" onClick={onOpenSouls} title="人格管理">
+          <div className="action-left">
+            <span className="action-icon">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" />
+                <path d="M19 15l.9 2.4L22 18l-2.1.9L19 21l-.9-2.1L16 18l2.1-.6z" />
+              </svg>
+            </span>
+            <span>人格管理</span>
           </div>
         </button>
 

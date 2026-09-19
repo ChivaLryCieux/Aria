@@ -79,6 +79,9 @@ pub async fn execute_orchestration(
                 .and_then(|projects| projects.into_iter().find(|p| p.id == project_id))
         });
 
+    // Active persona content (Souls/<folder>/SOUL.md) injected into prompts.
+    let soul = storage::load_active_soul_content(&app);
+
     let replies = orchestration::execute(
         &app,
         &state.http,
@@ -90,6 +93,7 @@ pub async fn execute_orchestration(
         request.conversation_id,
         request.reasoning_effort,
         project.as_ref().map(|p| (p.id.as_str(), p.name.as_str(), p.default_directory.as_deref())),
+        soul.as_deref(),
     )
     .await;
     Ok(replies)
@@ -306,6 +310,38 @@ pub fn get_project_token_stats(
         .into_iter()
         .find(|p| p.project_id == project_id)
         .unwrap_or_default()
+}
+
+// ─── Souls (personas) ──────────────────────────────────────────
+
+#[tauri::command]
+pub fn list_souls(app: AppHandle) -> Result<Vec<storage::Soul>, String> {
+    storage::list_souls(&app)
+}
+
+#[tauri::command]
+pub fn create_soul(
+    app: AppHandle,
+    name: String,
+    description: Option<String>,
+) -> Result<storage::Soul, String> {
+    storage::create_soul(&app, &name, description.as_deref().unwrap_or(""))
+}
+
+#[tauri::command]
+pub fn save_soul(
+    app: AppHandle,
+    folder: String,
+    name: String,
+    description: String,
+    content: String,
+) -> Result<storage::Soul, String> {
+    storage::save_soul(&app, &folder, &name, &description, &content)
+}
+
+#[tauri::command]
+pub fn delete_soul(app: AppHandle, folder: String) -> Result<(), String> {
+    storage::delete_soul(&app, &folder)
 }
 
 #[tauri::command]

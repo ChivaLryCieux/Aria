@@ -65,6 +65,9 @@ pub struct AppSettings {
     /// UI font scale preset: 13px | 14px | 15px.
     #[serde(default)]
     pub font_size: Option<String>,
+    /// Active persona folder under Souls/ (defaults to `Default`).
+    #[serde(default)]
+    pub active_soul: Option<String>,
 }
 
 fn default_orchestration_mode() -> String {

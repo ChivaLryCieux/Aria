@@ -123,6 +123,7 @@ pub async fn execute(
     conversation_id: Option<String>,
     reasoning_effort: Option<String>,
     project: Option<(&str, &str, Option<&str>)>,
+    soul: Option<&str>,
 ) -> Vec<ChatMessage> {
     let kernel_ready = {
         let mut guard = daemon.lock().await;
@@ -137,14 +138,14 @@ pub async fn execute(
     if kernel_ready {
         let conversation = conversation_id.unwrap_or_else(|| format!("adhoc-{}", Uuid::new_v4()));
         if mode == "parallel" {
-            execute_parallel_kernel(kernel_http, profiles, base_messages, &conversation, reasoning_effort, project).await
+            execute_parallel_kernel(kernel_http, profiles, base_messages, &conversation, reasoning_effort, project, soul).await
         } else {
-            execute_dag_kernel(app, kernel_http, profiles, base_messages, &conversation, reasoning_effort, project).await
+            execute_dag_kernel(app, kernel_http, profiles, base_messages, &conversation, reasoning_effort, project, soul).await
         }
     } else if mode == "parallel" {
-        execute_parallel(http, profiles, base_messages, project).await
+        execute_parallel(http, profiles, base_messages, project, soul).await
     } else {
-        execute_dag(app, http, profiles, base_messages, project).await
+        execute_dag(app, http, profiles, base_messages, project, soul).await
     }
 }
 
@@ -221,10 +222,13 @@ fn latest_user_input(messages: &[ChatMessage]) -> String {
         .unwrap_or_default()
 }
 
-fn kernel_stage_prompt(stage: &OrchestrationStage, index: usize, user_input: &str) -> String {
+fn kernel_stage_prompt(stage: &OrchestrationStage, index: usize, user_input: &str, soul: Option<&str>) -> String {
     let persona = stage.profile.system_prompt.trim();
     let mut prompt = String::new();
     if index == 0 {
+        if let Some(soul) = soul.map(str::trim).filter(|s| !s.is_empty()) {
+            prompt.push_str(&format!("[人格设定]\n{soul}\n\n"));
+        }
         if !persona.is_empty() {
             prompt.push_str(&format!("[算子准则]\n{persona}\n\n"));
         }
@@ -255,6 +259,7 @@ async fn execute_dag_kernel(
     conversation: &str,
     reasoning_effort: Option<String>,
     project: Option<(&str, &str, Option<&str>)>,
+    soul: Option<&str>,
 ) -> Vec<ChatMessage> {
     let stages = build_stages(profiles);
     let daemon_url = "http://127.0.0.1:19387";
@@ -283,7 +288,7 @@ async fn execute_dag_kernel(
             api_key: stage.profile.api_key.clone(),
             reasoning_effort: reasoning_effort.clone(),
             workspace: workspace.clone(),
-            prompt: kernel_stage_prompt(stage, index, &user_input),
+            prompt: kernel_stage_prompt(stage, index, &user_input, soul),
         };
 
         let start_time = std::time::Instant::now();
@@ -377,18 +382,18 @@ async fn execute_parallel_kernel(
     conversation: &str,
     reasoning_effort: Option<String>,
     project: Option<(&str, &str, Option<&str>)>,
+    soul: Option<&str>,
 ) -> Vec<ChatMessage> {
     let daemon_url = "http://127.0.0.1:19387";
     let user_input = latest_user_input(base_messages);
     let workspace = project.and_then(|(_, _, dir)| dir.map(str::to_string));
+    let soul_block = soul.map(str::trim).filter(|s| !s.is_empty()).map(|s| format!("[人格设定]\n{s}\n\n", s = s));
 
     let futures = profiles.iter().enumerate().map(|(index, profile)| {
         let conversation = format!("{conversation}::parallel-{index}");
-        let prompt = if profile.system_prompt.trim().is_empty() {
-            user_input.clone()
-        } else {
-            format!("[算子准则]\n{}\n\n[操作员输入]\n{}", profile.system_prompt.trim(), user_input)
-        };
+        let persona = profile.system_prompt.trim();
+        let persona_block = if persona.is_empty() { String::new() } else { format!("[算子准则]\n{persona}\n\n") };
+        let prompt = format!("{}{}[操作员输入]\n{}", soul_block.clone().unwrap_or_default(), persona_block, user_input);
         let request = KernelTurnRequest {
             conversation_id: conversation,
             stage_id: Some(format!("{}-{}", profile.id, index)),
@@ -438,6 +443,7 @@ async fn execute_dag(
     profiles: &[AiProfile],
     base_messages: &[ChatMessage],
     project: Option<(&str, &str, Option<&str>)>,
+    soul: Option<&str>,
 ) -> Vec<ChatMessage> {
     let stages = build_stages(profiles);
     let mut completed_replies: Vec<ChatMessage> = Vec::new();
@@ -462,7 +468,14 @@ async fn execute_dag(
         let mut context: Vec<ChatMessage> = base_messages.to_vec();
         context.extend(completed_replies.clone());
 
-        let augmented_profile = with_stage_instruction(&stage.profile, stage);
+        let soul_seeded_profile = match soul.map(str::trim).filter(|s| !s.is_empty()) {
+            Some(soul) => AiProfile {
+                system_prompt: format!("[人格设定]\n{soul}\n\n{}", stage.profile.system_prompt.trim()),
+                ..stage.profile.clone()
+            },
+            None => stage.profile.clone(),
+        };
+        let augmented_profile = with_stage_instruction(&soul_seeded_profile, stage);
         let api_messages = to_api_messages(&context, Some(&augmented_profile));
         let start_time = std::time::Instant::now();
         let prompt_tokens = context.iter().map(|m| crate::tokens::estimate_tokens(&m.content)).sum::<usize>();
@@ -551,13 +564,25 @@ async fn execute_parallel(
     profiles: &[AiProfile],
     base_messages: &[ChatMessage],
     _project: Option<(&str, &str, Option<&str>)>,
+    soul: Option<&str>,
 ) -> Vec<ChatMessage> {
-    let api_messages_per_profile: Vec<_> = profiles
+    let soul_seeded: Vec<AiProfile> = profiles
+        .iter()
+        .map(|profile| match soul.map(str::trim).filter(|s| !s.is_empty()) {
+            Some(soul) => AiProfile {
+                system_prompt: format!("[人格设定]\n{soul}\n\n{}", profile.system_prompt.trim()),
+                ..profile.clone()
+            },
+            None => profile.clone(),
+        })
+        .collect();
+
+    let api_messages_per_profile: Vec<_> = soul_seeded
         .iter()
         .map(|p| to_api_messages(base_messages, Some(p)))
         .collect();
 
-    let futures: Vec<_> = profiles
+    let futures: Vec<_> = soul_seeded
         .iter()
         .zip(api_messages_per_profile.iter())
         .map(|(profile, api_msgs)| async move {
